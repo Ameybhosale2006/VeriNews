@@ -66,7 +66,7 @@ def get_user_vote_type(rumor_id, user_ip):
     cursor.execute("SELECT vote_type FROM votes_log WHERE rumor_id = ? AND user_ip = ?", (rumor_id, user_ip))
     result = cursor.fetchone()
     conn.close()
-    return result[0] if result else None
+    return result if result else None
 
 def toggle_vote(rumor_id, user_ip, targeted_vote_type):
     """Handles adding a new vote, changing a vote, or retracting (undoing) an existing vote."""
@@ -106,7 +106,7 @@ def toggle_vote(rumor_id, user_ip, targeted_vote_type):
     cursor.execute("SELECT true_votes, fake_votes FROM rumors WHERE id = ?", (rumor_id,))
     row = cursor.fetchone()
     if row:
-        true_v, fake_v = row[0], row[1]
+        true_v, fake_v = row, row
         total = true_v + fake_v
         
         if total >= 3:
@@ -174,46 +174,43 @@ else:
 rumors = cursor.fetchall()
 conn.close()
 
-# Render cards to screen dynamically
+# Render items using standard web container boxes to guarantee mobile stability
 if rumors:
     for rumor in rumors:
         r_id, r_title, r_content, r_pincode, r_true, r_fake, r_status, r_proof = rumor
         
         with st.container():
             st.markdown("---")
-            col1, col2 = st.columns(2)
+            st.markdown(f"### {r_title}")
+            st.markdown(f"**📍 Pincode Location Target:** {r_pincode} | **Status Evaluation:** `{r_status}`")
+            st.write(r_content)
             
-            with col1:
-                st.markdown(f"### {r_title}")
-                st.markdown(f"**📍 Pincode Location Target:** {r_pincode}")
-                st.write(r_content)
-                if r_proof:
-                    st.markdown(f"[🔗 View Attached Verification Evidence]({r_proof})")
+            if r_proof:
+                st.markdown(f"[🔗 View Attached Verification Evidence]({r_proof})")
+                
+            st.write(f"🟢 **True Votes:** {r_true} | 🔴 **Fake Votes:** {r_fake}")
+            
+            # Fetch current active vote style for user interface highlights
+            current_vote = get_user_vote_type(r_id, user_identity)
+            
+            true_label = "Undo Vote True ↩️" if current_vote == 'true' else "Vote True 👍"
+            fake_label = "Undo Vote Fake ↩️" if current_vote == 'fake' else "Vote Fake 👎"
+            
+            # Simplified row deployment using structured parameters to avoid compiler gaps
+            b1, b2 = st.columns([1, 1])
+            with b1:
+                if st.button(true_label, key=f"t_{r_id}", type="primary" if current_vote == 'true' else "secondary"):
+                    msg = toggle_vote(r_id, user_identity, 'true')
+                    st.toast(msg)
+                    st.rerun()
+            with b2:
+                if st.button(fake_label, key=f"f_{r_id}", type="primary" if current_vote == 'fake' else "secondary"):
+                    msg = toggle_vote(r_id, user_identity, 'fake')
+                    st.toast(msg)
+                    st.rerun()
                     
-            with col2:
-                st.markdown(f"**Status Evaluation:** \n### `{r_status}`")
-                st.write(f"🟢 **True Votes:** {r_true} | 🔴 **Fake Votes:** {r_fake}")
-                
-                # Fetch current active vote style for user interface highlights
-                current_vote = get_user_vote_type(r_id, user_identity)
-                
-                true_label = "Undo Vote True ↩️" if current_vote == 'true' else "Vote True 👍"
-                fake_label = "Undo Vote Fake ↩️" if current_vote == 'fake' else "Vote Fake 👎"
-                
-                b_col1, b_col2 = st.columns(2)
-                with b_col1:
-                    if st.button(true_label, key=f"t_{r_id}", type="primary" if current_vote == 'true' else "secondary"):
-                        msg = toggle_vote(r_id, user_identity, 'true')
-                        st.toast(msg)
-                        st.rerun()
-                with b_col2:
-                    if st.button(fake_label, key=f"f_{r_id}", type="primary" if current_vote == 'fake' else "secondary"):
-                        msg = toggle_vote(r_id, user_identity, 'fake')
-                        st.toast(msg)
-                        st.rerun()
-                        
-                if current_vote:
-                    st.caption(f"ℹ️ You previously marked this claim as **{current_vote.upper()}**. Tap the same button again to undo your selection.")
+            if current_vote:
+                st.caption(f"ℹ️ You previously marked this claim as **{current_vote.upper()}**. Tap the same button again to undo your selection.")
 else:
     st.info("No reported neighborhood rumors found matching this region criteria.")
-        
+    
