@@ -73,10 +73,9 @@ def delete_rumor(rumor_id, user_ip):
     """Deletes a rumor post if the current user is the original creator."""
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
-    # Security check: verify creator matches
     cursor.execute("SELECT creator_ip FROM rumors WHERE id = ?", (rumor_id,))
     row = cursor.fetchone()
-    if row and row[0] == user_ip:
+    if row and row == user_ip:
         cursor.execute("DELETE FROM rumors WHERE id = ?", (rumor_id,))
         cursor.execute("DELETE FROM votes_log WHERE rumor_id = ?", (rumor_id,))
         conn.commit()
@@ -123,7 +122,7 @@ def toggle_vote(rumor_id, user_ip, targeted_vote_type):
     cursor.execute("SELECT true_votes, fake_votes FROM rumors WHERE id = ?", (rumor_id,))
     row = cursor.fetchone()
     if row:
-        true_v, fake_v = row[0], row[1]
+        true_v, fake_v = row, row
         total = true_v + fake_v
         
         if total >= 3:
@@ -219,11 +218,12 @@ if rumors:
             fake_label = "Undo Vote Fake ↩️" if current_vote == 'fake' else "Vote Fake 👎"
             
             # Functional Action Row
-            b1, b2, b3 = st.columns([1, 1, 4])
+            b1, b2, b3 = st.columns(3)
             with b1:
                 if st.button(true_label, key=f"t_{r_id}", type="primary" if current_vote == 'true' else "secondary"):
                     msg = toggle_vote(r_id, user_identity, 'true')
                     st.toast(msg)
                     st.rerun()
             with b2:
-                
+                if st.button(fake_label, key=f"f_{r_id}", type="primary" if current_vote == 'fake' else "secondary"):
+                    
