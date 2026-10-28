@@ -11,7 +11,7 @@ def init_db():
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     
-    # 1. Main rumors table
+    # 1. Main rumors table (Added creator_ip column to track authorship)
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS rumors (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -21,7 +21,8 @@ def init_db():
             true_votes INTEGER DEFAULT 0,
             fake_votes INTEGER DEFAULT 0,
             status TEXT DEFAULT 'Unverified ⏳',
-            proof_link TEXT
+            proof_link TEXT,
+            creator_ip TEXT DEFAULT 'SYSTEM'
         )
     ''')
     
@@ -40,13 +41,13 @@ def init_db():
     cursor.execute("SELECT COUNT(*) FROM rumors")
     if cursor.fetchone() == 0:
         mock_data = [
-            ("Water Supply Maintenance Alert", "Forward claiming water supply will be completely cut off this weekend due to pipeline maintenance work.", 400001, 12, 2, "Verified True ✅", "https://example-municipal-corp.gov"),
-            ("Emergency Bank Closure Rumor", "Viral message stating all local banks are closing for 5 consecutive working days starting tomorrow. Panic buying reported.", 400025, 1, 18, "Confirmed Fake ❌", "https://example-reserve-bank.org"),
-            ("Traffic Diversion near Main Highway", "Posts claiming the main flyover is shut down tonight due to urgent road repairs. Commuters advised to take alternate routes.", 400001, 2, 1, "Unverified ⏳", "")
+            ("Water Supply Maintenance Alert", "Forward claiming water supply will be completely cut off this weekend due to pipeline maintenance work.", 400001, 12, 2, "Verified True ✅", "https://example-municipal-corp.gov", "SYSTEM"),
+            ("Emergency Bank Closure Rumor", "Viral message stating all local banks are closing for 5 consecutive working days starting tomorrow. Panic buying reported.", 400025, 1, 18, "Confirmed Fake ❌", "https://example-reserve-bank.org", "SYSTEM"),
+            ("Traffic Diversion near Main Highway", "Posts claiming the main flyover is shut down tonight due to urgent road repairs. Commuters advised to take alternate routes.", 400001, 2, 1, "Unverified ⏳", "", "SYSTEM")
         ]
         cursor.executemany('''
-            INSERT INTO rumors (title, content, pincode, true_votes, fake_votes, status, proof_link)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO rumors (title, content, pincode, true_votes, fake_votes, status, proof_link, creator_ip)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         ''', mock_data)
         
     conn.commit()
@@ -66,7 +67,23 @@ def get_user_vote_type(rumor_id, user_ip):
     cursor.execute("SELECT vote_type FROM votes_log WHERE rumor_id = ? AND user_ip = ?", (rumor_id, user_ip))
     result = cursor.fetchone()
     conn.close()
-    return result[0] if result else None
+    return result if result else None
+
+def delete_rumor(rumor_id, user_ip):
+    """Deletes a rumor post if the current user is the original creator."""
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+    # Security check: verify creator matches
+    cursor.execute("SELECT creator_ip FROM rumors WHERE id = ?", (rumor_id,))
+    row = cursor.fetchone()
+    if row and row[0] == user_ip:
+        cursor.execute("DELETE FROM rumors WHERE id = ?", (rumor_id,))
+        cursor.execute("DELETE FROM votes_log WHERE rumor_id = ?", (rumor_id,))
+        conn.commit()
+        conn.close()
+        return True
+    conn.close()
+    return False
 
 def toggle_vote(rumor_id, user_ip, targeted_vote_type):
     """Handles adding a new vote, changing a vote, or retracting (undoing) an existing vote."""
@@ -150,8 +167,8 @@ if submit_button:
         conn = sqlite3.connect(DB_FILE)
         cursor = conn.cursor()
         cursor.execute(
-            "INSERT INTO rumors (title, content, pincode, proof_link) VALUES (?, ?, ?, ?)",
-            (title, content, pincode, proof_link)
+            "INSERT INTO rumors (title, content, pincode, proof_link, creator_ip) VALUES (?, ?, ?, ?, ?)",
+            (title, content, pincode, proof_link, user_identity)
         )
         conn.commit()
         conn.close()
@@ -174,13 +191,18 @@ else:
 rumors = cursor.fetchall()
 conn.close()
 
-# Render items using standard web container boxes to guarantee mobile stability
+# Render items dynamically
 if rumors:
     for rumor in rumors:
-        r_id, r_title, r_content, r_pincode, r_true, r_fake, r_status, r_proof = rumor
+        r_id, r_title, r_content, r_pincode, r_true, r_fake, r_status, r_proof, r_creator = rumor
         
         with st.container():
             st.markdown("---")
+            
+            # Creator Header display
+            if r_creator == user_identity:
+                st.caption("📝 *You posted this report*")
+                
             st.markdown(f"### {r_title}")
             st.markdown(f"**📍 Pincode Location Target:** {r_pincode} | **Status Evaluation:** `{r_status}`")
             st.write(r_content)
@@ -196,21 +218,12 @@ if rumors:
             true_label = "Undo Vote True ↩️" if current_vote == 'true' else "Vote True 👍"
             fake_label = "Undo Vote Fake ↩️" if current_vote == 'fake' else "Vote Fake 👎"
             
-            # Simplified row deployment using structured parameters to avoid compiler gaps
-            b1, b2 = st.columns(2)
+            # Functional Action Row
+            b1, b2, b3 = st.columns([1, 1, 4])
             with b1:
                 if st.button(true_label, key=f"t_{r_id}", type="primary" if current_vote == 'true' else "secondary"):
                     msg = toggle_vote(r_id, user_identity, 'true')
                     st.toast(msg)
                     st.rerun()
             with b2:
-                if st.button(fake_label, key=f"f_{r_id}", type="primary" if current_vote == 'fake' else "secondary"):
-                    msg = toggle_vote(r_id, user_identity, 'fake')
-                    st.toast(msg)
-                    st.rerun()
-                    
-            if current_vote:
-                st.caption(f"ℹ️ You previously marked this claim as **{current_vote.upper()}**. Tap the same button again to undo your selection.")
-else:
-    st.info("No reported neighborhood rumors found matching this region criteria.")
-    
+                
