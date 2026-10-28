@@ -76,7 +76,7 @@ def toggle_vote(rumor_id, user_ip, targeted_vote_type):
     existing_vote = get_user_vote_type(rumor_id, user_ip)
     
     if existing_vote == targeted_vote_type:
-        # ---- UNDO LOGIC: User clicked the active button again, remove their vote ----
+        # ---- UNDO LOGIC ----
         cursor.execute("DELETE FROM votes_log WHERE rumor_id = ? AND user_ip = ?", (rumor_id, user_ip))
         if targeted_vote_type == 'true':
             cursor.execute("UPDATE rumors SET true_votes = MAX(0, true_votes - 1) WHERE id = ?", (rumor_id,))
@@ -86,17 +86,14 @@ def toggle_vote(rumor_id, user_ip, targeted_vote_type):
     else:
         # ---- NEW VOTE OR CHANGE VOTE LOGIC ----
         if existing_vote is not None:
-            # First remove the old opposite vote counter
             if existing_vote == 'true':
                 cursor.execute("UPDATE rumors SET true_votes = MAX(0, true_votes - 1) WHERE id = ?", (rumor_id,))
             else:
                 cursor.execute("UPDATE rumors SET fake_votes = MAX(0, fake_votes - 1) WHERE id = ?", (rumor_id,))
             cursor.execute("UPDATE votes_log SET vote_type = ? WHERE rumor_id = ? AND user_ip = ?", (targeted_vote_type, rumor_id, user_ip))
         else:
-            # Fresh new vote entry
             cursor.execute("INSERT INTO votes_log (rumor_id, user_ip, vote_type) VALUES (?, ?, ?)", (rumor_id, user_ip, targeted_vote_type))
             
-        # Add to the new targeted counter
         if targeted_vote_type == 'true':
             cursor.execute("UPDATE rumors SET true_votes = true_votes + 1 WHERE id = ?", (rumor_id,))
         else:
@@ -184,7 +181,7 @@ if rumors:
         
         with st.container():
             st.markdown("---")
-            col1, col2 = st.columns()
+            col1, col2 = st.columns(2)
             
             with col1:
                 st.markdown(f"### {r_title}")
@@ -197,10 +194,9 @@ if rumors:
                 st.markdown(f"**Status Evaluation:** \n### `{r_status}`")
                 st.write(f"🟢 **True Votes:** {r_true} | 🔴 **Fake Votes:** {r_fake}")
                 
-                # Fetch current active vote style for user custom interface highlights
+                # Fetch current active vote style for user interface highlights
                 current_vote = get_user_vote_type(r_id, user_identity)
                 
-                # Custom label updates to show active states
                 true_label = "Undo Vote True ↩️" if current_vote == 'true' else "Vote True 👍"
                 fake_label = "Undo Vote Fake ↩️" if current_vote == 'fake' else "Vote Fake 👎"
                 
@@ -220,4 +216,4 @@ if rumors:
                     st.caption(f"ℹ️ You previously marked this claim as **{current_vote.upper()}**. Tap the same button again to undo your selection.")
 else:
     st.info("No reported neighborhood rumors found matching this region criteria.")
-            
+        
