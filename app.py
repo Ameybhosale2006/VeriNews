@@ -66,7 +66,7 @@ def get_user_vote_type(rumor_id, user_ip):
     cursor.execute("SELECT vote_type FROM votes_log WHERE rumor_id = ? AND user_ip = ?", (rumor_id, user_ip))
     result = cursor.fetchone()
     conn.close()
-    return result if result else None
+    return result[0] if result else None
 
 def toggle_vote(rumor_id, user_ip, targeted_vote_type):
     """Handles adding a new vote, changing a vote, or retracting (undoing) an existing vote."""
@@ -106,7 +106,7 @@ def toggle_vote(rumor_id, user_ip, targeted_vote_type):
     cursor.execute("SELECT true_votes, fake_votes FROM rumors WHERE id = ?", (rumor_id,))
     row = cursor.fetchone()
     if row:
-        true_v, fake_v = row, row
+        true_v, fake_v = row[0], row[1]
         total = true_v + fake_v
         
         if total >= 3:
@@ -197,7 +197,7 @@ if rumors:
             fake_label = "Undo Vote Fake ↩️" if current_vote == 'fake' else "Vote Fake 👎"
             
             # Simplified row deployment using structured parameters to avoid compiler gaps
-            b1, b2 = st.columns([1, 1])
+            b1, b2 = st.columns(2)
             with b1:
                 if st.button(true_label, key=f"t_{r_id}", type="primary" if current_vote == 'true' else "secondary"):
                     msg = toggle_vote(r_id, user_identity, 'true')
