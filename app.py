@@ -39,7 +39,7 @@ def init_db():
     
     # Pre-seed realistic example neighborhood rumors if database is empty
     cursor.execute("SELECT COUNT(*) FROM rumors")
-    if cursor.fetchone() == 0:
+    if cursor.fetchone()[0] == 0:
         mock_data = [
             ("Water Supply Maintenance Alert", "Forward claiming water supply will be completely cut off this weekend due to pipeline maintenance work.", 400001, 12, 2, "Verified True ✅", "https://example-municipal-corp.gov", "SYSTEM"),
             ("Emergency Bank Closure Rumor", "Viral message stating all local banks are closing for 5 consecutive working days starting tomorrow. Panic buying reported.", 400025, 1, 18, "Confirmed Fake ❌", "https://example-reserve-bank.org", "SYSTEM"),
@@ -67,7 +67,7 @@ def get_user_vote_type(rumor_id, user_ip):
     cursor.execute("SELECT vote_type FROM votes_log WHERE rumor_id = ? AND user_ip = ?", (rumor_id, user_ip))
     result = cursor.fetchone()
     conn.close()
-    return result if result else None
+    return result[0] if result else None
 
 def delete_rumor(rumor_id, user_ip):
     """Deletes a rumor post if the current user is the original creator."""
@@ -75,7 +75,7 @@ def delete_rumor(rumor_id, user_ip):
     cursor = conn.cursor()
     cursor.execute("SELECT creator_ip FROM rumors WHERE id = ?", (rumor_id,))
     row = cursor.fetchone()
-    if row and row == user_ip:
+    if row and row[0] == user_ip:
         cursor.execute("DELETE FROM rumors WHERE id = ?", (rumor_id,))
         cursor.execute("DELETE FROM votes_log WHERE rumor_id = ?", (rumor_id,))
         conn.commit()
@@ -122,7 +122,7 @@ def toggle_vote(rumor_id, user_ip, targeted_vote_type):
     cursor.execute("SELECT true_votes, fake_votes FROM rumors WHERE id = ?", (rumor_id,))
     row = cursor.fetchone()
     if row:
-        true_v, fake_v = row, row
+        true_v, fake_v = row[0], row[1]
         total = true_v + fake_v
         
         if total >= 3:
