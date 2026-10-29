@@ -1,8 +1,8 @@
 import sqlite3
 import math
 import streamlit as st
+import streamlit.components.v1 as components
 from streamlit.runtime.scriptrunner import get_script_run_ctx
-from streamlit_components_auth import html # standard HTML5 bridge fallback
 
 DB_FILE = "verinews.db"
 
@@ -31,9 +31,11 @@ def init_db():
     
     # Securely migrate tables if users are updating live repositories
     cursor.execute("PRAGMA table_info(rumors)")
-    cols = [info[1] for info in cursor.fetchall()]
-    if 'latitude' not in cols:
+    cols = [info for info in cursor.fetchall()]
+    columns = [c[1] for c in cols]
+    if 'latitude' not in columns:
         cursor.execute("ALTER TABLE rumors ADD COLUMN latitude REAL DEFAULT 0.0")
+    if 'longitude' not in columns:
         cursor.execute("ALTER TABLE rumors ADD COLUMN longitude REAL DEFAULT 0.0")
         
     cursor.execute('''
@@ -48,7 +50,7 @@ def init_db():
     
     # Pre-seed sample neighborhood alerts paired with realistic coordinate mapping details
     cursor.execute("SELECT COUNT(*) FROM rumors")
-    if cursor.fetchone()[0] == 0:
+    if cursor.fetchone() == 0:
         mock_data = [
             ("Water Supply Maintenance Alert", "Forward claiming water supply will be completely cut off this weekend due to pipeline maintenance work.", 400001, 12, 2, "Verified True ✅", "https://example-municipal-corp.gov", "SYSTEM", "https://google.com", 18.9220, 72.8340),
             ("Emergency Bank Closure Rumor", "Viral message stating all local banks are closing for 5 consecutive working days starting tomorrow.", 400025, 1, 18, "Confirmed Fake ❌", "https://example-reserve-bank.org", "SYSTEM", "", 19.0178, 72.8478),
@@ -82,7 +84,7 @@ def get_user_vote_type(rumor_id, user_ip):
     cursor.execute("SELECT vote_type FROM votes_log WHERE rumor_id = ? AND user_ip = ?", (rumor_id, user_ip))
     result = cursor.fetchone()
     conn.close()
-    return result[0] if result else None
+    return result if result else None
 
 def handle_delete_click(rumor_id, user_ip):
     conn = sqlite3.connect(DB_FILE)
@@ -99,7 +101,8 @@ def handle_delete_click(rumor_id, user_ip):
 def handle_vote_click(rumor_id, user_ip, targeted_vote_type):
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
-    existing_vote = get_user_vote_type(rumor_id, user_ip)
+    existing_vote_tuple = get_user_vote_type(rumor_id, user_ip)
+    existing_vote = existing_vote_tuple[0] if existing_vote_tuple else None
     
     if existing_vote == targeted_vote_type:
         cursor.execute("DELETE FROM votes_log WHERE rumor_id = ? AND user_ip = ?", (rumor_id, user_ip))
@@ -143,8 +146,7 @@ init_db()
 user_identity = get_user_session_id()
 
 # ---- NATIVE BROWSER GEOLOCATION LINK COMPONENT ----
-# Automatically triggers a pop-up tracking coordinate signatures on screen deployment logs
-st.markdown("""
+components.html("""
 <script>
     navigator.geolocation.getCurrentPosition(function(position) {
         const lat = position.coords.latitude;
@@ -152,11 +154,11 @@ st.markdown("""
         window.parent.postMessage({type: 'streamlit:setComponentValue', value: {lat: lat, lon: lon}}, '*');
     });
 </script>
-""", unsafe_allow_html=True)
+""", height=0, width=0)
 
 # Temporary fallback query handler to ensure continuous tracking data states
 if 'user_lat' not in st.session_state:
-    st.session_state['user_lat'] = 19.0760 # Default system coordinate backup center point (Mumbai metrics)
+    st.session_state['user_lat'] = 19.0760 # Default center backup coordinates (Mumbai)
     st.session_state['user_lon'] = 72.8777
 
 st.title("🛡️ VeriNews — Geo-Location Community Index")
@@ -170,8 +172,6 @@ with st.sidebar.form(key="report_form", clear_on_submit=True):
     pincode = st.number_input("Target Area Pincode", min_value=100000, max_value=999999, step=1, value=400001)
     proof_link = st.text_input("Verification Source Link (Optional)", placeholder="https://official-government-update.com")
     maps_input = st.text_input("Google Maps Location URL (Optional)", placeholder="Paste shared link from Google Maps")
-    
-    st.markdown("💡 *The app will automatically tag your current physical coordinate path coordinates to this report to keep it transparent.*")
     submit_button = st.form_submit_button(label="Publish to Dashboard")
 
 if submit_button:
@@ -196,17 +196,17 @@ cursor.execute("SELECT * FROM rumors")
 all_rumors = cursor.fetchall()
 conn.close()
 
-# Process dynamic geographic distance calculation loop structure updates
 processed_rumors = []
 for rumor in all_rumors:
     r_id, r_title, r_content, r_pincode, r_true, r_fake, r_status, r_proof, r_creator, r_maps, r_lat, r_lon = rumor
-    
-    # Math calculation using the Haversine equation algorithm logic
     dist = haversine_distance(st.session_state['user_lat'], st.session_state['user_lon'], r_lat, r_lon)
-    
     processed_rumors.append({
         'id': r_id, 'title': r_title, 'content': r_content, 'pincode': r_pincode,
         'true': r_true, 'fake': r_fake, 'status': r_status, 'proof': r_proof,
         'creator': r_creator, 'maps': r_maps, 'distance': dist
     })
 
+# THE CORE INNOVATION: Bubble nearest elements right to the top
+sorted_rumors = sorted(processed_rumors, key=lambda x: x['distance'])
+
+st.subheader("📍 Alerts Sorted by Nearest Proximity")
