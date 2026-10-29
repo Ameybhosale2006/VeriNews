@@ -131,7 +131,7 @@ def handle_vote_click(rumor_id, user_ip, targeted_vote_type):
 init_db()
 user_identity = get_user_session_id()
 
-# 🗺️ BUILT-IN GEOGRAPHIC DICTIONARY: Maps locations directly to precise coordinates instantly
+# BUILT-IN GEOGRAPHIC DICTIONARY: Maps locations directly to precise coordinates instantly
 GEO_DICTIONARY = {
     "mumbai": (19.0760, 72.8777),
     "delhi": (28.6139, 77.2090),
@@ -212,11 +212,10 @@ st.caption(f"🎯 Current Focus Coordinates: `{active_lat:.4f}, {active_lon:.4f}
 
 if sorted_rumors:
     for rumor in sorted_rumors:
-        with st.container():
-            st.markdown("---")
+        # Wrap everything beautifully inside a clean layout visual container
+        with st.container(border=True):
             is_owner = (rumor['creator'] == user_identity)
             if is_owner: st.caption("📝 *You posted this report*")
             
             dist_label = "🔥 Right in your area (0.00 km away)" if rumor['distance'] == 0 else f"📍 ({rumor['distance']:.2f} km away)"
             
-            st.markdown(f"### {rumor['title']} <span style='font-size:14px; color:gray;'>{dist_label}</span>", unsafe_allow_html=True)
