@@ -1,10 +1,18 @@
 import sqlite3
 import math
+import os
 import streamlit as st
 import streamlit.components.v1 as components
 from streamlit.runtime.scriptrunner import get_script_run_ctx
 
 DB_FILE = "verinews.db"
+
+# 🔄 AUTOMATIC RESET TRICK: This instantly wipes the old broken database file on the server
+if os.path.exists(DB_FILE):
+    try:
+        os.remove(DB_FILE)
+    except Exception:
+        pass
 
 st.set_page_config(page_title="VeriNews - Local Rumor Checker", page_icon="🛡️", layout="wide")
 
@@ -81,7 +89,7 @@ def handle_delete_click(rumor_id, user_ip):
     cursor = conn.cursor()
     cursor.execute("SELECT creator_ip FROM rumors WHERE id = ?", (rumor_id,))
     row = cursor.fetchone()
-    if row and row[0] == user_ip:
+    if row and row == user_ip:
         cursor.execute("DELETE FROM rumors WHERE id = ?", (rumor_id,))
         cursor.execute("DELETE FROM votes_log WHERE rumor_id = ?", (rumor_id,))
         conn.commit()
@@ -92,7 +100,7 @@ def handle_vote_click(rumor_id, user_ip, targeted_vote_type):
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     existing_vote_tuple = get_user_vote_type(rumor_id, user_ip)
-    existing_vote = existing_vote_tuple[0] if existing_vote_tuple else None
+    existing_vote = existing_vote_tuple if existing_vote_tuple else None
     
     if existing_vote == targeted_vote_type:
         cursor.execute("DELETE FROM votes_log WHERE rumor_id = ? AND user_ip = ?", (rumor_id, user_ip))
@@ -118,7 +126,7 @@ def handle_vote_click(rumor_id, user_ip, targeted_vote_type):
     cursor.execute("SELECT true_votes, fake_votes FROM rumors WHERE id = ?", (rumor_id,))
     row = cursor.fetchone()
     if row:
-        true_v, fake_v = row[0], row[1]
+        true_v, fake_v = row, row
         total = true_v + fake_v
         if total >= 3:
             fake_pct = (fake_v / total) * 100
@@ -153,7 +161,7 @@ if 'user_lat' not in st.session_state:
 st.title("🛡️ VeriNews — Geo-Location Community Index")
 st.markdown("An open public space to verify claims sorted instantly by proximity to your current position.")
 
-# Sidebar Form Configuration (Pincode removed completely)
+# Sidebar Form Configuration
 st.sidebar.header("📢 Report an Unverified Forward")
 with st.sidebar.form(key="report_form", clear_on_submit=True):
     title = st.text_input("Rumor/Forward Headline", placeholder="e.g., Water cuts expected tomorrow")
@@ -205,11 +213,8 @@ if sorted_rumors:
         with st.container():
             st.markdown("---")
             is_owner = (rumor['creator'] == user_identity)
-            if is_owner: st.caption("📝 *You posted this report*")
+            if is_owner: st.caption("html📝 *You posted this report*")
             
             dist_label = f"🔥 Very Close ({rumor['distance']:.2f} km away)" if rumor['distance'] < 5 else f"📍 ({rumor['distance']:.2f} km away)"
             
             st.markdown(f"### {rumor['title']} <span style='font-size:14px; color:gray;'>{dist_label}</span>", unsafe_allow_html=True)
-            st.markdown(f"**Status Evaluation:** `{rumor['status']}`")
-            st.write(rumor['content'])
-            
