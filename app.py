@@ -1,10 +1,8 @@
 import sqlite3
 import streamlit as st
 
-# 🚀 THE ULTIMATE FIX: Switched file name to v2 to completely bypass the locked server cache!
 DB_FILE = "verinews_v2.db"
 
-# Page layout configurations
 st.set_page_config(page_title="VeriNews - Local Rumor Checker", page_icon="🛡️", layout="wide")
 
 def init_db():
@@ -25,7 +23,6 @@ def init_db():
             location_hub TEXT DEFAULT 'mumbai'
         )
     ''')
-    
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS votes_log (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -35,10 +32,8 @@ def init_db():
             UNIQUE(rumor_id, user_ip)
         )
     ''')
-    
-    # Pre-seed sample neighborhood alerts across different major hubs
     cursor.execute("SELECT COUNT(*) FROM rumors")
-    if cursor.fetchone()[0] == 0:
+    if cursor.fetchone() == 0:
         mock_data = [
             ("Water Supply Maintenance Alert", "Forward claiming water supply will be completely cut off this weekend due to pipeline maintenance work.", 12, 2, "Verified True ✅", "https://example-municipal-corp.gov", "SYSTEM", "https://google.com", "mumbai"),
             ("Emergency Bank Closure Rumor", "Viral message stating all local banks are closing for 5 consecutive working days starting tomorrow.", 1, 18, "Confirmed Fake ❌", "https://example-reserve-bank.org", "SYSTEM", "", "delhi"),
@@ -62,7 +57,7 @@ def get_user_vote_type(rumor_id, user_ip):
     cursor.execute("SELECT vote_type FROM votes_log WHERE rumor_id = ? AND user_ip = ?", (rumor_id, user_ip))
     result = cursor.fetchone()
     conn.close()
-    return result[0] if result else None
+    return result if result else None
 
 def handle_delete_click(rumor_id):
     conn = sqlite3.connect(DB_FILE)
@@ -77,7 +72,6 @@ def handle_vote_click(rumor_id, user_ip, targeted_vote_type):
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     existing_vote = get_user_vote_type(rumor_id, user_ip)
-    
     if existing_vote == targeted_vote_type:
         cursor.execute("DELETE FROM votes_log WHERE rumor_id = ? AND user_ip = ?", (rumor_id, user_ip))
         if targeted_vote_type == 'true':
@@ -98,7 +92,6 @@ def handle_vote_click(rumor_id, user_ip, targeted_vote_type):
         else:
             cursor.execute("UPDATE rumors SET fake_votes = fake_votes + 1 WHERE id = ?", (rumor_id,))
     conn.commit()
-    
     cursor.execute("SELECT true_votes, fake_votes FROM rumors WHERE id = ?", (rumor_id,))
     row = cursor.fetchone()
     if row:
@@ -124,15 +117,10 @@ HUBS = ["mumbai", "delhi", "bangalore", "pune", "chennai", "kolkata", "hyderabad
 st.title("🛡️ VeriNews — Location Proximity Index")
 st.markdown("An open public platform verifying viral claims sorted dynamically by regional zones.")
 
-# Active User Location Interface Handler
 st.subheader("🌍 Set Your Current Position")
-selected_city = st.selectbox(
-    "Select your current operational hub city to filter proximity feed:",
-    options=HUBS,
-    index=0
-)
+selected_city = st.selectbox("Select your current operational hub city to filter proximity feed:", options=HUBS, index=0)
+active_lat, active_lon = 0, 0 # placeholder tracking variables
 
-# Sidebar Form Configuration
 st.sidebar.header("📢 Report an Unverified Forward")
 with st.sidebar.form(key="report_form", clear_on_submit=True):
     title = st.text_input("Rumor/Forward Headline", placeholder="e.g., Local market closed early")
@@ -146,10 +134,7 @@ if submit_button:
     if title and content:
         conn = sqlite3.connect(DB_FILE)
         cursor = conn.cursor()
-        cursor.execute('''
-            INSERT INTO rumors (title, content, proof_link, creator_ip, maps_link, location_hub) 
-            VALUES (?, ?, ?, ?, ?, ?)
-        ''', (title, content, proof_link, user_identity, maps_input, rumor_location))
+        cursor.execute("INSERT INTO rumors (title, content, proof_link, creator_ip, maps_link, location_hub) VALUES (?, ?, ?, ?, ?, ?)", (title, content, proof_link, user_identity, maps_input, rumor_location))
         conn.commit()
         conn.close()
         st.sidebar.success("Rumor successfully published to dashboard!")
@@ -157,7 +142,6 @@ if submit_button:
     else:
         st.sidebar.error("Please fill out all required fields.")
 
-# Fetch records from SQLite database file
 conn = sqlite3.connect(DB_FILE)
 cursor = conn.cursor()
 cursor.execute("SELECT * FROM rumors")
@@ -169,14 +153,11 @@ for rumor in all_rumors:
     r_id, r_title, r_content, r_true, r_fake, r_status, r_proof, r_creator, r_maps, r_hub = rumor
     sort_rank = 1 if r_hub == selected_city else 2
     processed_rumors.append({
-        'id': r_id, 'title': r_title, 'content': r_content,
-        'true': r_true, 'fake': r_fake, 'status': r_status, 'proof': r_proof,
-        'creator': r_creator, 'maps': r_maps, 'hub': r_hub, 'rank': sort_rank
+        'id': r_id, 'title': r_title, 'content': r_content, 'true': r_true, 'fake': r_fake,
+        'status': r_status, 'proof': r_proof, 'creator': r_creator, 'maps': r_maps, 'hub': r_hub, 'rank': sort_rank
     })
 
-# Bubble matched region components straight to the top safely
 sorted_rumors = sorted(processed_rumors, key=lambda x: x['rank'])
-
 st.write("---")
 st.subheader(f"📍 Alerts Sorted for Zone: {selected_city.upper()}")
 
@@ -184,26 +165,21 @@ if sorted_rumors:
     for rumor in sorted_rumors:
         with st.container(border=True):
             is_owner = (rumor['creator'] == user_identity)
-            if is_owner: st.caption("📝 *You posted this report*")
-            
+            if is_owner: st.caption("html📝 *You posted this report*")
             zone_tag = "🔥 Active Local Area Update" if rumor['hub'] == selected_city else f"📍 Regional Update ({rumor['hub'].upper()})"
-            
             st.markdown(f"### {rumor['title']} <span style='font-size:14px; color:gray;'>[{zone_tag}]</span>", unsafe_allow_html=True)
             st.markdown(f"**Status Evaluation:** `{rumor['status']}`")
             st.write(rumor['content'])
-            
             if rumor['proof']: st.markdown(f"[🔗 View Attached Verification Evidence]({rumor['proof']})")
             if rumor['maps']: st.markdown(f"[🗺️ Open Location in Google Maps]({rumor['maps']})")
-                
             st.write(f"🟢 **True Votes:** {rumor['true']} | 🔴 **Fake Votes:** {rumor['fake']}")
-            
             current_vote = get_user_vote_type(rumor['id'], user_identity)
             true_label = "Undo Vote True ↩️" if current_vote == 'true' else "Vote True 👍"
             fake_label = "Undo Vote Fake ↩️" if current_vote == 'fake' else "Vote Fake 👎"
-            
-            # Action buttons explicitly rendered cleanly
             st.button(true_label, key=f"t_{rumor['id']}", type="primary" if current_vote == 'true' else "secondary", on_click=handle_vote_click, args=(rumor['id'], user_identity, 'true'))
             st.button(fake_label, key=f"f_{rumor['id']}", type="primary" if current_vote == 'fake' else "secondary", on_click=handle_vote_click, args=(rumor['id'], user_identity, 'fake'))
             st.button("🗑️ Delete Post", key=f"del_{rumor['id']}", type="secondary", on_click=handle_delete_click, args=(rumor['id'],))
-                
-            if current_vote:
+            # Completely flattened one-liner fallback layout to guarantee compilation
+            if current_vote: st.caption(f"ℹ️ Selection confirmed as {current_vote.upper()}. Click the active button again to remove selection feedback.")
+else:
+    st.info("No regional updates available.")
