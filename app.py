@@ -9,7 +9,7 @@ DB_FILE = "verinews.db"
 st.set_page_config(page_title="VeriNews - Local Rumor Checker", page_icon="🛡️", layout="wide")
 
 def init_db():
-    """Initializes the database schema with geographic support columns."""
+    """Initializes the database schema cleanly without the pincode field."""
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     cursor.execute('''
@@ -17,7 +17,6 @@ def init_db():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             title TEXT NOT NULL,
             content TEXT NOT NULL,
-            pincode INTEGER NOT NULL,
             true_votes INTEGER DEFAULT 0,
             fake_votes INTEGER DEFAULT 0,
             status TEXT DEFAULT 'Unverified ⏳',
@@ -29,15 +28,6 @@ def init_db():
         )
     ''')
     
-    # Securely migrate tables if users are updating live repositories
-    cursor.execute("PRAGMA table_info(rumors)")
-    cols = [info for info in cursor.fetchall()]
-    columns = [c[1] for c in cols]
-    if 'latitude' not in columns:
-        cursor.execute("ALTER TABLE rumors ADD COLUMN latitude REAL DEFAULT 0.0")
-    if 'longitude' not in columns:
-        cursor.execute("ALTER TABLE rumors ADD COLUMN longitude REAL DEFAULT 0.0")
-        
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS votes_log (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -52,13 +42,13 @@ def init_db():
     cursor.execute("SELECT COUNT(*) FROM rumors")
     if cursor.fetchone() == 0:
         mock_data = [
-            ("Water Supply Maintenance Alert", "Forward claiming water supply will be completely cut off this weekend due to pipeline maintenance work.", 400001, 12, 2, "Verified True ✅", "https://example-municipal-corp.gov", "SYSTEM", "https://google.com", 18.9220, 72.8340),
-            ("Emergency Bank Closure Rumor", "Viral message stating all local banks are closing for 5 consecutive working days starting tomorrow.", 400025, 1, 18, "Confirmed Fake ❌", "https://example-reserve-bank.org", "SYSTEM", "", 19.0178, 72.8478),
-            ("Traffic Diversion near Main Highway", "Posts claiming the main flyover is shut down tonight due to urgent road repairs.", 400001, 2, 1, "Unverified ⏳", "", "SYSTEM", "https://google.com", 18.9340, 72.8250)
+            ("Water Supply Maintenance Alert", "Forward claiming water supply will be completely cut off this weekend due to pipeline maintenance work.", 12, 2, "Verified True ✅", "https://example-municipal-corp.gov", "SYSTEM", "https://google.com", 18.9220, 72.8340),
+            ("Emergency Bank Closure Rumor", "Viral message stating all local banks are closing for 5 consecutive working days starting tomorrow.", 1, 18, "Confirmed Fake ❌", "https://example-reserve-bank.org", "SYSTEM", "", 19.0178, 72.8478),
+            ("Traffic Diversion near Main Highway", "Posts claiming the main flyover is shut down tonight due to urgent road repairs.", 2, 1, "Unverified ⏳", "", "SYSTEM", "https://google.com", 18.9340, 72.8250)
         ]
         cursor.executemany('''
-            INSERT INTO rumors (title, content, pincode, true_votes, fake_votes, status, proof_link, creator_ip, maps_link, latitude, longitude)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO rumors (title, content, true_votes, fake_votes, status, proof_link, creator_ip, maps_link, latitude, longitude)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', mock_data)
     conn.commit()
     conn.close()
@@ -156,7 +146,6 @@ components.html("""
 </script>
 """, height=0, width=0)
 
-# Temporary fallback query handler to ensure continuous tracking data states
 if 'user_lat' not in st.session_state:
     st.session_state['user_lat'] = 19.0760 # Default center backup coordinates (Mumbai)
     st.session_state['user_lon'] = 72.8777
@@ -164,24 +153,23 @@ if 'user_lat' not in st.session_state:
 st.title("🛡️ VeriNews — Geo-Location Community Index")
 st.markdown("An open public space to verify claims sorted instantly by proximity to your current position.")
 
-# Sidebar Form Configuration
+# Sidebar Form Configuration (Pincode removed completely)
 st.sidebar.header("📢 Report an Unverified Forward")
 with st.sidebar.form(key="report_form", clear_on_submit=True):
     title = st.text_input("Rumor/Forward Headline", placeholder="e.g., Water cuts expected tomorrow")
     content = st.text_area("Full Forward Message Text", placeholder="Paste the viral claim here...")
-    pincode = st.number_input("Target Area Pincode", min_value=100000, max_value=999999, step=1, value=400001)
     proof_link = st.text_input("Verification Source Link (Optional)", placeholder="https://official-government-update.com")
     maps_input = st.text_input("Google Maps Location URL (Optional)", placeholder="Paste shared link from Google Maps")
     submit_button = st.form_submit_button(label="Publish to Dashboard")
 
 if submit_button:
-    if title and content and pincode:
+    if title and content:
         conn = sqlite3.connect(DB_FILE)
         cursor = conn.cursor()
         cursor.execute('''
-            INSERT INTO rumors (title, content, pincode, proof_link, creator_ip, maps_link, latitude, longitude) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        ''', (title, content, pincode, proof_link, user_identity, maps_input, st.session_state['user_lat'], st.session_state['user_lon']))
+            INSERT INTO rumors (title, content, proof_link, creator_ip, maps_link, latitude, longitude) 
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        ''', (title, content, proof_link, user_identity, maps_input, st.session_state['user_lat'], st.session_state['user_lon']))
         conn.commit()
         conn.close()
         st.sidebar.success("Rumor broadcast successfully posted!")
@@ -198,15 +186,30 @@ conn.close()
 
 processed_rumors = []
 for rumor in all_rumors:
-    r_id, r_title, r_content, r_pincode, r_true, r_fake, r_status, r_proof, r_creator, r_maps, r_lat, r_lon = rumor
+    r_id, r_title, r_content, r_true, r_fake, r_status, r_proof, r_creator, r_maps, r_lat, r_lon = rumor
     dist = haversine_distance(st.session_state['user_lat'], st.session_state['user_lon'], r_lat, r_lon)
     processed_rumors.append({
-        'id': r_id, 'title': r_title, 'content': r_content, 'pincode': r_pincode,
+        'id': r_id, 'title': r_title, 'content': r_content,
         'true': r_true, 'fake': r_fake, 'status': r_status, 'proof': r_proof,
         'creator': r_creator, 'maps': r_maps, 'distance': dist
     })
 
-# THE CORE INNOVATION: Bubble nearest elements right to the top
+# Sort items dynamically based on distance metrics
 sorted_rumors = sorted(processed_rumors, key=lambda x: x['distance'])
 
 st.subheader("📍 Alerts Sorted by Nearest Proximity")
+st.caption(f"🌍 Current Device Position Lock Center: `{st.session_state['user_lat']:.4f}, {st.session_state['user_lon']:.4f}`")
+
+if sorted_rumors:
+    for rumor in sorted_rumors:
+        with st.container():
+            st.markdown("---")
+            is_owner = (rumor['creator'] == user_identity)
+            if is_owner: st.caption("📝 *You posted this report*")
+            
+            dist_label = f"🔥 Very Close ({rumor['distance']:.2f} km away)" if rumor['distance'] < 5 else f"📍 ({rumor['distance']:.2f} km away)"
+            
+            st.markdown(f"### {rumor['title']} <span style='font-size:14px; color:gray;'>{dist_label}</span>", unsafe_allow_html=True)
+            st.markdown(f"**Status Evaluation:** `{rumor['status']}`")
+            st.write(rumor['content'])
+            
