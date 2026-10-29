@@ -1,16 +1,8 @@
 import sqlite3
 import math
-import os
 import streamlit as st
 
 DB_FILE = "verinews.db"
-
-# 🔄 FORCE WIPE CACHED SCHEMA: Wipes out memory conflicts instantly
-if os.path.exists(DB_FILE):
-    try:
-        os.remove(DB_FILE)
-    except Exception:
-        pass
 
 # Page layout configurations
 st.set_page_config(page_title="VeriNews - Local Rumor Checker", page_icon="🛡️", layout="wide")
@@ -80,7 +72,7 @@ def get_user_vote_type(rumor_id, user_ip):
     cursor.execute("SELECT vote_type FROM votes_log WHERE rumor_id = ? AND user_ip = ?", (rumor_id, user_ip))
     result = cursor.fetchone()
     conn.close()
-    return result[0] if result else None
+    return result if result else None
 
 def handle_delete_click(rumor_id, user_ip):
     conn = sqlite3.connect(DB_FILE)
@@ -137,7 +129,7 @@ def handle_vote_click(rumor_id, user_ip, targeted_vote_type):
 init_db()
 user_identity = get_user_session_id()
 
-# BUILT-IN GEOGRAPHIC DICTIONARY: Maps locations directly to precise coordinates instantly
+# BUILT-IN GEOGRAPHIC DICTIONARY
 GEO_DICTIONARY = {
     "mumbai": (19.0760, 72.8777),
     "delhi": (28.6139, 77.2090),
@@ -160,7 +152,6 @@ selected_city = st.selectbox(
     index=0
 )
 
-# Core state updates based on dropdown actions
 active_lat, active_lon = GEO_DICTIONARY[selected_city]
 
 # Sidebar Form Configuration
@@ -225,3 +216,7 @@ if sorted_rumors:
             st.markdown(f"**Status Evaluation:** `{rumor['status']}`")
             st.write(rumor['content'])
             
+            if rumor['proof']: st.markdown(f"[🔗 View Attached Verification Evidence]({rumor['proof']})")
+            if rumor['maps']: st.markdown(f"[🗺️ Open Location in Google Maps]({rumor['maps']})")
+                
+            st.write(f"🟢 **True Votes:** {rumor['true']} | 🔴 **Fake Votes:** {rumor['fake']}")
