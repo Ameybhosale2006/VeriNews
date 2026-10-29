@@ -74,7 +74,7 @@ def handle_vote_click(rumor_id, user_ip, targeted_vote_type):
     """Processes clean vote state toggling (adding, changing, or undoing)."""
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
-    existing_vote = get_user_vote_typerumor_id, user_ip)
+    existing_vote = get_user_vote_type(rumor_id, user_ip)
     
     if existing_vote == targeted_vote_type:
         # ---- UNDO VOTE LOGIC ----
