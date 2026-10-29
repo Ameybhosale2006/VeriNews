@@ -71,7 +71,9 @@ def handle_delete_click(rumor_id):
 def handle_vote_click(rumor_id, user_ip, targeted_vote_type):
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
-    existing_vote = get_user_vote_type(rumor_id, user_ip)
+    existing_vote_tuple = get_user_vote_type(rumor_id, user_ip)
+    existing_vote = existing_vote_tuple[0] if existing_vote_tuple else None
+    
     if existing_vote == targeted_vote_type:
         cursor.execute("DELETE FROM votes_log WHERE rumor_id = ? AND user_ip = ?", (rumor_id, user_ip))
         if targeted_vote_type == 'true':
@@ -119,7 +121,6 @@ st.markdown("An open public platform verifying viral claims sorted dynamically b
 
 st.subheader("🌍 Set Your Current Position")
 selected_city = st.selectbox("Select your current operational hub city to filter proximity feed:", options=HUBS, index=0)
-active_lat, active_lon = 0, 0 # placeholder tracking variables
 
 st.sidebar.header("📢 Report an Unverified Forward")
 with st.sidebar.form(key="report_form", clear_on_submit=True):
@@ -165,7 +166,7 @@ if sorted_rumors:
     for rumor in sorted_rumors:
         with st.container(border=True):
             is_owner = (rumor['creator'] == user_identity)
-            if is_owner: st.caption("html📝 *You posted this report*")
+            if is_owner: st.caption("📝 *You posted this report*")
             zone_tag = "🔥 Active Local Area Update" if rumor['hub'] == selected_city else f"📍 Regional Update ({rumor['hub'].upper()})"
             st.markdown(f"### {rumor['title']} <span style='font-size:14px; color:gray;'>[{zone_tag}]</span>", unsafe_allow_html=True)
             st.markdown(f"**Status Evaluation:** `{rumor['status']}`")
@@ -173,13 +174,13 @@ if sorted_rumors:
             if rumor['proof']: st.markdown(f"[🔗 View Attached Verification Evidence]({rumor['proof']})")
             if rumor['maps']: st.markdown(f"[🗺️ Open Location in Google Maps]({rumor['maps']})")
             st.write(f"🟢 **True Votes:** {rumor['true']} | 🔴 **Fake Votes:** {rumor['fake']}")
-            current_vote = get_user_vote_type(rumor['id'], user_identity)
+            current_vote_tuple = get_user_vote_type(rumor['id'], user_identity)
+            current_vote = current_vote_tuple[0] if current_vote_tuple else None
             true_label = "Undo Vote True ↩️" if current_vote == 'true' else "Vote True 👍"
             fake_label = "Undo Vote Fake ↩️" if current_vote == 'fake' else "Vote Fake 👎"
             st.button(true_label, key=f"t_{rumor['id']}", type="primary" if current_vote == 'true' else "secondary", on_click=handle_vote_click, args=(rumor['id'], user_identity, 'true'))
             st.button(fake_label, key=f"f_{rumor['id']}", type="primary" if current_vote == 'fake' else "secondary", on_click=handle_vote_click, args=(rumor['id'], user_identity, 'fake'))
             st.button("🗑️ Delete Post", key=f"del_{rumor['id']}", type="secondary", on_click=handle_delete_click, args=(rumor['id'],))
-            # Completely flattened one-liner fallback layout to guarantee compilation
             if current_vote: st.caption(f"ℹ️ Selection confirmed as {current_vote.upper()}. Click the active button again to remove selection feedback.")
 else:
     st.info("No regional updates available.")
