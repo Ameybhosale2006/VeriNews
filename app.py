@@ -197,8 +197,6 @@ if rumors:
         
         with st.container():
             st.markdown("---")
-            
-            # Creator Header display
             if r_creator == user_identity:
                 st.caption("📝 *You posted this report*")
                 
@@ -211,19 +209,18 @@ if rumors:
                 
             st.write(f"🟢 **True Votes:** {r_true} | 🔴 **Fake Votes:** {r_fake}")
             
-            # Fetch current active vote style for user interface highlights
             current_vote = get_user_vote_type(r_id, user_identity)
-            
             true_label = "Undo Vote True ↩️" if current_vote == 'true' else "Vote True 👍"
             fake_label = "Undo Vote Fake ↩️" if current_vote == 'fake' else "Vote Fake 👎"
             
-            # Functional Action Row
-            b1, b2, b3 = st.columns(3)
-            with b1:
-                if st.button(true_label, key=f"t_{r_id}", type="primary" if current_vote == 'true' else "secondary"):
-                    msg = toggle_vote(r_id, user_identity, 'true')
-                    st.toast(msg)
-                    st.rerun()
-            with b2:
-                if st.button(fake_label, key=f"f_{r_id}", type="primary" if current_vote == 'fake' else "secondary"):
-                    
+            # Linear flat list structure to avoid mobile pasting indentation drops entirely
+            if st.button(true_label, key=f"t_{r_id}", type="primary" if current_vote == 'true' else "secondary"):
+                msg = toggle_vote(r_id, user_identity, 'true')
+                st.toast(msg)
+                st.rerun()
+                
+            if st.button(fake_label, key=f"f_{r_id}", type="primary" if current_vote == 'fake' else "secondary"):
+                msg = toggle_vote(r_id, user_identity, 'fake')
+                st.toast(msg)
+                st.rerun()
+                
