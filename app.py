@@ -1,14 +1,12 @@
 import sqlite3
 import streamlit as st
 
-# Switched to a fresh final file name to completely bypass any locked server storage cache
 DB_FILE = "verinews_final.db"
 
-# Page layout configurations
+# Basic Page Settings
 st.set_page_config(page_title="VeriNews - Local Rumor Checker", page_icon="🛡️", layout="wide")
 
 def init_db():
-    """Initializes the database schema cleanly and ensures all constraints match."""
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     cursor.execute('''
@@ -35,7 +33,7 @@ def init_db():
         )
     ''')
     cursor.execute("SELECT COUNT(*) FROM rumors")
-    if cursor.fetchone() == 0:
+    if cursor.fetchone()[0] == 0:
         mock_data = [
             ("Water Supply Maintenance Alert", "Forward claiming water supply will be completely cut off this weekend due to pipeline maintenance work.", 12, 2, "Verified True ✅", "https://example-municipal-corp.gov", "SYSTEM", "https://google.com", "mumbai"),
             ("Emergency Bank Closure Rumor", "Viral message stating all local banks are closing for 5 consecutive working days starting tomorrow.", 1, 18, "Confirmed Fake ❌", "https://example-reserve-bank.org", "SYSTEM", "", "delhi"),
@@ -54,7 +52,6 @@ def get_user_session_id():
     return str(ctx.session_id) if ctx is not None else "UNKNOWN_USER"
 
 def get_user_vote_type(rumor_id, user_ip):
-    """Returns the type of vote cast by the user ('true', 'fake', or None) as a clean string."""
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     cursor.execute("SELECT vote_type FROM votes_log WHERE rumor_id = ? AND user_ip = ?", (rumor_id, user_ip))
@@ -72,21 +69,17 @@ def handle_delete_click(rumor_id):
     st.toast("Post successfully deleted!")
 
 def handle_vote_click(rumor_id, user_ip, targeted_vote_type):
-    """Processes clean vote state toggling (adding, changing, or undoing)."""
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     existing_vote = get_user_vote_type(rumor_id, user_ip)
     
     if existing_vote == targeted_vote_type:
-        # ---- UNDO VOTE LOGIC ----
         cursor.execute("DELETE FROM votes_log WHERE rumor_id = ? AND user_ip = ?", (rumor_id, user_ip))
         if targeted_vote_type == 'true':
             cursor.execute("UPDATE rumors SET true_votes = MAX(0, true_votes - 1) WHERE id = ?", (rumor_id,))
         else:
             cursor.execute("UPDATE rumors SET fake_votes = MAX(0, fake_votes - 1) WHERE id = ?", (rumor_id,))
-        st.toast("Your vote has been removed.")
     else:
-        # ---- ONE PERSON ONE VOTE ENFORCEMENT ----
         if existing_vote is not None:
             if existing_vote == 'true':
                 cursor.execute("UPDATE rumors SET true_votes = MAX(0, true_votes - 1) WHERE id = ?", (rumor_id,))
@@ -100,11 +93,9 @@ def handle_vote_click(rumor_id, user_ip, targeted_vote_type):
             cursor.execute("UPDATE rumors SET true_votes = true_votes + 1 WHERE id = ?", (rumor_id,))
         else:
             cursor.execute("UPDATE rumors SET fake_votes = fake_votes + 1 WHERE id = ?", (rumor_id,))
-        st.toast(f"Logged choice as {targeted_vote_type.upper()}.")
         
     conn.commit()
     
-    # ---- STATUS RECALCULATION ENGINE ----
     cursor.execute("SELECT true_votes, fake_votes FROM rumors WHERE id = ?", (rumor_id,))
     row = cursor.fetchone()
     if row:
@@ -174,11 +165,10 @@ for rumor in all_rumors:
         'status': r_status, 'proof': r_proof, 'creator': r_creator, 'maps': r_maps, 'hub': r_hub, 'rank': sort_rank
     })
 
-# Render Metric Summaries using a chart helper layout configuration
+sorted_rumors = sorted(processed_rumors, key=lambda x: x['rank'])
+
 st.write("### 📊 Community Verification Metrics")
 st.write(f"Cumulative audit actions logged by regional citizens: **{total_true_global}** Trust confirmations vs. **{total_fake_global}** Misinformation flags.")
-
-sorted_rumors = sorted(processed_rumors, key=lambda x: x['rank'])
 st.write("---")
 st.subheader(f"📍 Alerts Sorted for Zone: {selected_city.upper()}")
 
@@ -187,18 +177,25 @@ if sorted_rumors:
         with st.container(border=True):
             is_owner = (rumor['creator'] == user_identity)
             
-            # Stacking the owner tag and title linearly to ensure perfect layout compilation on mobile screens
             if is_owner: st.caption("📝 *You posted this report*")
             zone_tag = "🔥 Active Local Area Update" if rumor['hub'] == selected_city else f"📍 Regional Update ({rumor['hub'].upper()})"
             st.markdown(f"### {rumor['title']} <span style='font-size:14px; color:gray;'>[{zone_tag}]</span>", unsafe_allow_html=True)
             
-            # Clean context details placement
             st.markdown(f"**Status Evaluation:** `{rumor['status']}`")
             st.write(rumor['content'])
             if rumor['proof']: st.markdown(f"[🔗 View Attached Verification Evidence]({rumor['proof']})")
             if rumor['maps']: st.markdown(f"[🗺️ Open Location in Google Maps]({rumor['maps']})")
             st.write(f"🟢 **True Votes:** {rumor['true']} | 🔴 **Fake Votes:** {rumor['fake']}")
             
-            # ---- ANTI-SPAM CORE ENFORCEMENT ENGINE ----
             current_vote = get_user_vote_type(rumor['id'], user_identity)
             true_label = "Undo Vote True ↩️" if current_vote == 'true' else "Vote True 👍"
+            fake_label = "Undo Vote Fake ↩️" if current_vote == 'fake' else "Vote Fake 👎"
+            
+            # 100% Flat Structure layout blocks - Completely immune to indentation drops on mobile
+            st.button(true_label, key=f"t_{rumor['id']}", type="primary" if current_vote == 'true' else "secondary", on_click=handle_vote_click, args=(rumor['id'], user_identity, 'true'))
+            st.button(fake_label, key=f"f_{rumor['id']}", type="primary" if current_vote == 'fake' else "secondary", on_click=handle_vote_click, args=(rumor['id'], user_identity, 'fake'))
+            
+            # --- THREE DOTS OPTION FOR DELETION ---
+            with st.popover("⋮ Options Menu", help="Post settings"):
+                if is_owner: st.button("🗑️ Delete Post", key=f"del_{rumor['id']}", type="secondary", on_click=handle_delete_click, args=(rumor['id'],), use_container_width=True)
+                if not is_owner: st.caption("🔒 Actions Locked")
