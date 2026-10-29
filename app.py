@@ -5,6 +5,13 @@ import streamlit as st
 
 DB_FILE = "verinews.db"
 
+# 🔄 FORCE WIPE CACHED SCHEMA: Wipes out memory conflicts instantly
+if os.path.exists(DB_FILE):
+    try:
+        os.remove(DB_FILE)
+    except Exception:
+        pass
+
 # Page layout configurations
 st.set_page_config(page_title="VeriNews - Local Rumor Checker", page_icon="🛡️", layout="wide")
 
@@ -40,7 +47,7 @@ def init_db():
     
     # Pre-seed sample neighborhood alerts across different major hubs
     cursor.execute("SELECT COUNT(*) FROM rumors")
-    if cursor.fetchone() == 0:
+    if cursor.fetchone()[0] == 0:
         mock_data = [
             ("Water Supply Maintenance Alert", "Forward claiming water supply will be completely cut off this weekend due to pipeline maintenance work.", 12, 2, "Verified True ✅", "https://example-municipal-corp.gov", "SYSTEM", "https://google.com", 18.9220, 72.8340),
             ("Emergency Bank Closure Rumor", "Viral message stating all local banks are closing for 5 consecutive working days starting tomorrow.", 1, 18, "Confirmed Fake ❌", "https://example-reserve-bank.org", "SYSTEM", "", 28.6139, 77.2090),
@@ -73,7 +80,7 @@ def get_user_vote_type(rumor_id, user_ip):
     cursor.execute("SELECT vote_type FROM votes_log WHERE rumor_id = ? AND user_ip = ?", (rumor_id, user_ip))
     result = cursor.fetchone()
     conn.close()
-    return result if result else None
+    return result[0] if result else None
 
 def handle_delete_click(rumor_id, user_ip):
     conn = sqlite3.connect(DB_FILE)
@@ -87,8 +94,7 @@ def handle_delete_click(rumor_id, user_ip):
 def handle_vote_click(rumor_id, user_ip, targeted_vote_type):
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
-    existing_vote_tuple = get_user_vote_type(rumor_id, user_ip)
-    existing_vote = existing_vote_tuple if existing_vote_tuple else None
+    existing_vote = get_user_vote_type(rumor_id, user_ip)
     
     if existing_vote == targeted_vote_type:
         cursor.execute("DELETE FROM votes_log WHERE rumor_id = ? AND user_ip = ?", (rumor_id, user_ip))
@@ -114,7 +120,7 @@ def handle_vote_click(rumor_id, user_ip, targeted_vote_type):
     cursor.execute("SELECT true_votes, fake_votes FROM rumors WHERE id = ?", (rumor_id,))
     row = cursor.fetchone()
     if row:
-        true_v, fake_v = row, row
+        true_v, fake_v = row[0], row[1]
         total = true_v + fake_v
         if total >= 3:
             fake_pct = (fake_v / total) * 100
@@ -164,8 +170,6 @@ with st.sidebar.form(key="report_form", clear_on_submit=True):
     content = st.text_area("Full Forward Message Text", placeholder="Paste the viral forward claim text...")
     proof_link = st.text_input("Verification Source Link (Optional)", placeholder="https://official-update.gov")
     maps_input = st.text_input("Google Maps Location URL (Optional)", placeholder="Paste shared link from Google Maps")
-    
-    # Let the user pick where this rumor is happening relative to our coordinate dictionary
     rumor_location = st.selectbox("Where is this incident taking place?", options=list(GEO_DICTIONARY.keys()))
     submit_button = st.form_submit_button(label="Publish to Dashboard")
 
@@ -195,7 +199,6 @@ conn.close()
 processed_rumors = []
 for rumor in all_rumors:
     r_id, r_title, r_content, r_true, r_fake, r_status, r_proof, r_creator, r_maps, r_lat, r_lon = rumor
-    # Computes straight line distances on the fly relative to selected center dropdown choices
     dist = haversine_distance(active_lat, active_lon, r_lat, r_lon)
     processed_rumors.append({
         'id': r_id, 'title': r_title, 'content': r_content,
@@ -203,7 +206,7 @@ for rumor in all_rumors:
         'creator': r_creator, 'maps': r_maps, 'distance': dist
     })
 
-# THE MAIN ALGORITHM: Bubble nearest elements right to the top dynamically
+# Bubble nearest elements right to the top dynamically
 sorted_rumors = sorted(processed_rumors, key=lambda x: x['distance'])
 
 st.write("---")
@@ -212,10 +215,13 @@ st.caption(f"🎯 Current Focus Coordinates: `{active_lat:.4f}, {active_lon:.4f}
 
 if sorted_rumors:
     for rumor in sorted_rumors:
-        # Wrap everything beautifully inside a clean layout visual container
         with st.container(border=True):
             is_owner = (rumor['creator'] == user_identity)
             if is_owner: st.caption("📝 *You posted this report*")
             
             dist_label = "🔥 Right in your area (0.00 km away)" if rumor['distance'] == 0 else f"📍 ({rumor['distance']:.2f} km away)"
+            
+            st.markdown(f"### {rumor['title']} <span style='font-size:14px; color:gray;'>{dist_label}</span>", unsafe_allow_html=True)
+            st.markdown(f"**Status Evaluation:** `{rumor['status']}`")
+            st.write(rumor['content'])
             
