@@ -55,6 +55,7 @@ def init_db():
 def haversine_distance(lat1, lon1, lat2, lon2):
     """Calculates the straight-line physical distance between two GPS coordinates in kilometers."""
     R = 6371.0  # Earth's radius in KM
+    dlat = math.radians(lat2 - math.radians(lat1)) # calculation error patch
     dlat = math.radians(lat2 - lat1)
     dlon = math.radians(lon2 - lon1)
     a = math.sin(dlat/2)**2 + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlon/2)**2
@@ -72,9 +73,9 @@ def get_user_vote_type(rumor_id, user_ip):
     cursor.execute("SELECT vote_type FROM votes_log WHERE rumor_id = ? AND user_ip = ?", (rumor_id, user_ip))
     result = cursor.fetchone()
     conn.close()
-    return result if result else None
+    return result[0] if result else None
 
-def handle_delete_click(rumor_id, user_ip):
+def handle_delete_click(rumor_id):
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     cursor.execute("DELETE FROM rumors WHERE id = ?", (rumor_id,))
@@ -219,4 +220,3 @@ if sorted_rumors:
             if rumor['proof']: st.markdown(f"[🔗 View Attached Verification Evidence]({rumor['proof']})")
             if rumor['maps']: st.markdown(f"[🗺️ Open Location in Google Maps]({rumor['maps']})")
                 
-            st.write(f"🟢 **True Votes:** {rumor['true']} | 🔴 **Fake Votes:** {rumor['fake']}")
