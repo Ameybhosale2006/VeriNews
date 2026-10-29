@@ -72,7 +72,7 @@ def handle_vote_click(rumor_id, user_ip, targeted_vote_type):
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     existing_vote_tuple = get_user_vote_type(rumor_id, user_ip)
-    existing_vote = existing_vote_tuple[0] if existing_vote_tuple else None
+    existing_vote = existing_vote_tuple if existing_vote_tuple else None
     
     if existing_vote == targeted_vote_type:
         cursor.execute("DELETE FROM votes_log WHERE rumor_id = ? AND user_ip = ?", (rumor_id, user_ip))
@@ -166,21 +166,32 @@ if sorted_rumors:
     for rumor in sorted_rumors:
         with st.container(border=True):
             is_owner = (rumor['creator'] == user_identity)
-            if is_owner: st.caption("📝 *You posted this report*")
-            zone_tag = "🔥 Active Local Area Update" if rumor['hub'] == selected_city else f"📍 Regional Update ({rumor['hub'].upper()})"
-            st.markdown(f"### {rumor['title']} <span style='font-size:14px; color:gray;'>[{zone_tag}]</span>", unsafe_allow_html=True)
+            
+            # 🏢 TOP ROW SPLIT: Split title row into left (90% content) and right (10% actions menu)
+            title_col, menu_col = st.columns([9, 1])
+            
+            with title_col:
+                if is_owner: st.caption("📝 *You posted this report*")
+                zone_tag = "🔥 Active Local Area Update" if rumor['hub'] == selected_city else f"📍 Regional Update ({rumor['hub'].upper()})"
+                st.markdown(f"### {rumor['title']} <span style='font-size:14px; color:gray;'>[{zone_tag}]</span>", unsafe_allow_html=True)
+            
+            with menu_col:
+                # 💬 The Options Dropdown: Renders an elegant vertical options anchor
+                with st.popover("⋮", help="Post Options"):
+                    st.button("🗑️ Delete Post", key=f"del_{rumor['id']}", type="secondary", on_click=handle_delete_click, args=(rumor['id'],), use_container_width=True)
+            
             st.markdown(f"**Status Evaluation:** `{rumor['status']}`")
             st.write(rumor['content'])
             if rumor['proof']: st.markdown(f"[🔗 View Attached Verification Evidence]({rumor['proof']})")
             if rumor['maps']: st.markdown(f"[🗺️ Open Location in Google Maps]({rumor['maps']})")
             st.write(f"🟢 **True Votes:** {rumor['true']} | 🔴 **Fake Votes:** {rumor['fake']}")
+            
             current_vote_tuple = get_user_vote_type(rumor['id'], user_identity)
-            current_vote = current_vote_tuple[0] if current_vote_tuple else None
+            current_vote = current_vote_tuple if current_vote_tuple else None
             true_label = "Undo Vote True ↩️" if current_vote == 'true' else "Vote True 👍"
             fake_label = "Undo Vote Fake ↩️" if current_vote == 'fake' else "Vote Fake 👎"
+            
+            # Action controls
             st.button(true_label, key=f"t_{rumor['id']}", type="primary" if current_vote == 'true' else "secondary", on_click=handle_vote_click, args=(rumor['id'], user_identity, 'true'))
             st.button(fake_label, key=f"f_{rumor['id']}", type="primary" if current_vote == 'fake' else "secondary", on_click=handle_vote_click, args=(rumor['id'], user_identity, 'fake'))
-            st.button("🗑️ Delete Post", key=f"del_{rumor['id']}", type="secondary", on_click=handle_delete_click, args=(rumor['id'],))
-            if current_vote: st.caption(f"ℹ️ Selection confirmed as {current_vote.upper()}. Click the active button again to remove selection feedback.")
-else:
-    st.info("No regional updates available.")
+            
