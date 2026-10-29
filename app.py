@@ -198,7 +198,10 @@ if rumors:
         
         with st.container():
             st.markdown("---")
-            if r_creator == user_identity:
+            
+            # Use short inline definitions to prevent any indentation failure
+            is_owner = (r_creator == user_identity)
+            if is_owner:
                 st.caption("📝 *You posted this report*")
                 
             st.markdown(f"### {r_title}")
@@ -214,15 +217,10 @@ if rumors:
             true_label = "Undo Vote True ↩️" if current_vote == 'true' else "Vote True 👍"
             fake_label = "Undo Vote Fake ↩️" if current_vote == 'fake' else "Vote Fake 👎"
             
-            # Action controls
+            # Action controls running perfectly on a single level
             if st.button(true_label, key=f"t_{r_id}", type="primary" if current_vote == 'true' else "secondary"):
                 msg = toggle_vote(r_id, user_identity, 'true')
                 st.toast(msg)
                 st.rerun()
                 
             if st.button(fake_label, key=f"f_{r_id}", type="primary" if current_vote == 'fake' else "secondary"):
-                msg = toggle_vote(r_id, user_identity, 'fake')
-                st.toast(msg)
-                st.rerun()
-                
-            if r_creator == user_identity:
