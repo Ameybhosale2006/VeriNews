@@ -42,7 +42,7 @@ def init_db():
         )
     ''')
     cursor.execute("SELECT COUNT(*) FROM rumors")
-    if cursor.fetchone() == 0:
+    if cursor.fetchone()[0] == 0:
         mock_data = [
             ("Water Supply Maintenance Alert", "Forward claiming water supply will be completely cut off this weekend due to pipeline maintenance work.", 400001, 12, 2, "Verified True ✅", "https://example-municipal-corp.gov", "SYSTEM", "https://google.com"),
             ("Emergency Bank Closure Rumor", "Viral message stating all local banks are closing for 5 consecutive working days starting tomorrow. Panic buying reported.", 400025, 1, 18, "Confirmed Fake ❌", "https://example-reserve-bank.org", "SYSTEM", ""),
@@ -75,7 +75,7 @@ def handle_delete_click(rumor_id, user_ip):
     cursor = conn.cursor()
     cursor.execute("SELECT creator_ip FROM rumors WHERE id = ?", (rumor_id,))
     row = cursor.fetchone()
-    if row and row == user_ip:
+    if row and row[0] == user_ip:
         cursor.execute("DELETE FROM rumors WHERE id = ?", (rumor_id,))
         cursor.execute("DELETE FROM votes_log WHERE rumor_id = ?", (rumor_id,))
         conn.commit()
@@ -86,7 +86,9 @@ def handle_vote_click(rumor_id, user_ip, targeted_vote_type):
     """Callback wrapper to process vote state toggling natively on click triggers."""
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
-    existing_vote = get_user_vote_type(rumor_id, user_ip)
+    existing_vote_tuple = get_user_vote_type(rumor_id, user_ip)
+    existing_vote = existing_vote_tuple[0] if existing_vote_tuple else None
+    
     if existing_vote == targeted_vote_type:
         cursor.execute("DELETE FROM votes_log WHERE rumor_id = ? AND user_ip = ?", (rumor_id, user_ip))
         if targeted_vote_type == 'true':
@@ -167,12 +169,11 @@ conn.close()
 
 if rumors:
     for rumor in rumors:
-        # Adjusted for the new maps column mapping layout
         r_id, r_title, r_content, r_pincode, r_true, r_fake, r_status, r_proof, r_creator, r_maps = rumor
         with st.container():
             st.markdown("---")
             is_owner = (r_creator == user_identity)
-            if is_owner: st.caption("html📝 *You posted this report*")
+            if is_owner: st.caption("📝 *You posted this report*")
             st.markdown(f"### {r_title}")
             st.markdown(f"**📍 Pincode Location Target:** {r_pincode} | **Status Evaluation:** `{r_status}`")
             st.write(r_content)
@@ -181,7 +182,9 @@ if rumors:
             if r_maps: st.markdown(f"[🗺️ Open Location in Google Maps]({r_maps})")
                 
             st.write(f"🟢 **True Votes:** {r_true} | 🔴 **Fake Votes:** {r_fake}")
-            current_vote = get_user_vote_type(r_id, user_identity)
+            current_vote_tuple = get_user_vote_type(r_id, user_identity)
+            current_vote = current_vote_tuple[0] if current_vote_tuple else None
+            
             true_label = "Undo Vote True ↩️" if current_vote == 'true' else "Vote True 👍"
             fake_label = "Undo Vote Fake ↩️" if current_vote == 'fake' else "Vote Fake 👎"
             
@@ -190,4 +193,3 @@ if rumors:
             if is_owner: st.button("🗑️ Delete Post", key=f"del_{r_id}", type="secondary", on_click=handle_delete_click, args=(r_id, user_identity))
             if current_vote: st.caption(f"ℹ️ You previously marked this claim as **{current_vote.upper()}**. Tap the same button again to undo your selection.")
 else:
-    st.info("No reported neighborhood rumors found matching this region criteria.")
