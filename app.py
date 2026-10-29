@@ -26,7 +26,7 @@ def init_db():
         )
     ''')
     
-    # Check if we need to add the new maps column to an existing database safely
+    # Secure mapping configuration for existing structural schemas
     cursor.execute("PRAGMA table_info(rumors)")
     columns = [info[1] for info in cursor.fetchall()]
     if 'maps_link' not in columns:
@@ -67,7 +67,7 @@ def get_user_vote_type(rumor_id, user_ip):
     cursor.execute("SELECT vote_type FROM votes_log WHERE rumor_id = ? AND user_ip = ?", (rumor_id, user_ip))
     result = cursor.fetchone()
     conn.close()
-    return result if result else None
+    return result[0] if result else None
 
 def handle_delete_click(rumor_id, user_ip):
     """Callback wrapper to process deletions on click triggers."""
@@ -86,8 +86,7 @@ def handle_vote_click(rumor_id, user_ip, targeted_vote_type):
     """Callback wrapper to process vote state toggling natively on click triggers."""
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
-    existing_vote_tuple = get_user_vote_type(rumor_id, user_ip)
-    existing_vote = existing_vote_tuple[0] if existing_vote_tuple else None
+    existing_vote = get_user_vote_type(rumor_id, user_ip)
     
     if existing_vote == targeted_vote_type:
         cursor.execute("DELETE FROM votes_log WHERE rumor_id = ? AND user_ip = ?", (rumor_id, user_ip))
@@ -109,6 +108,7 @@ def handle_vote_click(rumor_id, user_ip, targeted_vote_type):
         else:
             cursor.execute("UPDATE rumors SET fake_votes = fake_votes + 1 WHERE id = ?", (rumor_id,))
     conn.commit()
+    
     cursor.execute("SELECT true_votes, fake_votes FROM rumors WHERE id = ?", (rumor_id,))
     row = cursor.fetchone()
     if row:
@@ -182,14 +182,16 @@ if rumors:
             if r_maps: st.markdown(f"[🗺️ Open Location in Google Maps]({r_maps})")
                 
             st.write(f"🟢 **True Votes:** {r_true} | 🔴 **Fake Votes:** {r_fake}")
-            current_vote_tuple = get_user_vote_type(r_id, user_identity)
-            current_vote = current_vote_tuple[0] if current_vote_tuple else None
+            current_vote = get_user_vote_type(r_id, user_identity)
             
             true_label = "Undo Vote True ↩️" if current_vote == 'true' else "Vote True 👍"
             fake_label = "Undo Vote Fake ↩️" if current_vote == 'fake' else "Vote Fake 👎"
             
+            # Using clean layout functions to completely drop multi-line loops
             st.button(true_label, key=f"t_{r_id}", type="primary" if current_vote == 'true' else "secondary", on_click=handle_vote_click, args=(r_id, user_identity, 'true'))
             st.button(fake_label, key=f"f_{r_id}", type="primary" if current_vote == 'fake' else "secondary", on_click=handle_vote_click, args=(r_id, user_identity, 'fake'))
+            
             if is_owner: st.button("🗑️ Delete Post", key=f"del_{r_id}", type="secondary", on_click=handle_delete_click, args=(r_id, user_identity))
             if current_vote: st.caption(f"ℹ️ You previously marked this claim as **{current_vote.upper()}**. Tap the same button again to undo your selection.")
 else:
+    st.info("No reported neighborhood rumors found matching this region criteria.")
