@@ -1,7 +1,8 @@
 import sqlite3
 import streamlit as st
 
-DB_FILE = "verinews_v2.db"
+# Switched to a fresh final file name to completely bypass any locked server storage cache
+DB_FILE = "verinews_final.db"
 
 # Page layout configurations
 st.set_page_config(page_title="VeriNews - Local Rumor Checker", page_icon="🛡️", layout="wide")
@@ -34,7 +35,7 @@ def init_db():
         )
     ''')
     cursor.execute("SELECT COUNT(*) FROM rumors")
-    if cursor.fetchone()[0] == 0:
+    if cursor.fetchone() == 0:
         mock_data = [
             ("Water Supply Maintenance Alert", "Forward claiming water supply will be completely cut off this weekend due to pipeline maintenance work.", 12, 2, "Verified True ✅", "https://example-municipal-corp.gov", "SYSTEM", "https://google.com", "mumbai"),
             ("Emergency Bank Closure Rumor", "Viral message stating all local banks are closing for 5 consecutive working days starting tomorrow.", 1, 18, "Confirmed Fake ❌", "https://example-reserve-bank.org", "SYSTEM", "", "delhi"),
@@ -186,22 +187,18 @@ if sorted_rumors:
         with st.container(border=True):
             is_owner = (rumor['creator'] == user_identity)
             
-            # --- FIXED CARD LAYOUT STRUCTURING ---
-            # Using flat layout columns to keep elements safely separated on mobile
-            title_col, menu_col = st.columns([0.9, 0.1])
+            # Stacking the owner tag and title linearly to ensure perfect layout compilation on mobile screens
+            if is_owner: st.caption("📝 *You posted this report*")
+            zone_tag = "🔥 Active Local Area Update" if rumor['hub'] == selected_city else f"📍 Regional Update ({rumor['hub'].upper()})"
+            st.markdown(f"### {rumor['title']} <span style='font-size:14px; color:gray;'>[{zone_tag}]</span>", unsafe_allow_html=True)
             
-            with title_col:
-                if is_owner: st.caption("📝 *You posted this report*")
-                zone_tag = "🔥 Active Local Area Update" if rumor['hub'] == selected_city else f"📍 Regional Update ({rumor['hub'].upper()})"
-                st.markdown(f"### {rumor['title']} <span style='font-size:14px; color:gray;'>[{zone_tag}]</span>", unsafe_allow_html=True)
-            
-            with menu_col:
-                # 💬 THREE DOTS OPTION FOR THE CREATOR ONLY
-                with st.popover("⋮", help="Post Settings"):
-                    if is_owner: st.button("🗑️ Delete Post", key=f"del_{rumor['id']}", type="secondary", on_click=handle_delete_click, args=(rumor['id'],), use_container_width=True)
-                    if not is_owner: st.caption("🔒 Actions Locked")
-
+            # Clean context details placement
             st.markdown(f"**Status Evaluation:** `{rumor['status']}`")
             st.write(rumor['content'])
             if rumor['proof']: st.markdown(f"[🔗 View Attached Verification Evidence]({rumor['proof']})")
             if rumor['maps']: st.markdown(f"[🗺️ Open Location in Google Maps]({rumor['maps']})")
+            st.write(f"🟢 **True Votes:** {rumor['true']} | 🔴 **Fake Votes:** {rumor['fake']}")
+            
+            # ---- ANTI-SPAM CORE ENFORCEMENT ENGINE ----
+            current_vote = get_user_vote_type(rumor['id'], user_identity)
+            true_label = "Undo Vote True ↩️" if current_vote == 'true' else "Vote True 👍"
