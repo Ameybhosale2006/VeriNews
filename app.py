@@ -6,7 +6,7 @@ DB_FILE = "verinews_v2.db"
 st.set_page_config(page_title="VeriNews - Local Rumor Checker", page_icon="🛡️", layout="wide")
 
 def init_db():
-    """Initializes a completely fresh database file to bypass frozen server caches."""
+    """Initializes the database schema cleanly and ensures all constraints match."""
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     cursor.execute('''
@@ -33,7 +33,7 @@ def init_db():
         )
     ''')
     cursor.execute("SELECT COUNT(*) FROM rumors")
-    if cursor.fetchone() == 0:
+    if cursor.fetchone()[0] == 0:
         mock_data = [
             ("Water Supply Maintenance Alert", "Forward claiming water supply will be completely cut off this weekend due to pipeline maintenance work.", 12, 2, "Verified True ✅", "https://example-municipal-corp.gov", "SYSTEM", "https://google.com", "mumbai"),
             ("Emergency Bank Closure Rumor", "Viral message stating all local banks are closing for 5 consecutive working days starting tomorrow.", 1, 18, "Confirmed Fake ❌", "https://example-reserve-bank.org", "SYSTEM", "", "delhi"),
@@ -52,12 +52,13 @@ def get_user_session_id():
     return str(ctx.session_id) if ctx is not None else "UNKNOWN_USER"
 
 def get_user_vote_type(rumor_id, user_ip):
+    """Returns the type of vote cast by the user ('true', 'fake', or None) as a clean string."""
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     cursor.execute("SELECT vote_type FROM votes_log WHERE rumor_id = ? AND user_ip = ?", (rumor_id, user_ip))
     result = cursor.fetchone()
     conn.close()
-    return result if result else None
+    return result[0] if result else None
 
 def handle_delete_click(rumor_id):
     conn = sqlite3.connect(DB_FILE)
@@ -69,18 +70,21 @@ def handle_delete_click(rumor_id):
     st.toast("Post successfully deleted!")
 
 def handle_vote_click(rumor_id, user_ip, targeted_vote_type):
+    """Processes clean vote state toggling (adding, changing, or undoing)."""
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
-    existing_vote_tuple = get_user_vote_type(rumor_id, user_ip)
-    existing_vote = existing_vote_tuple if existing_vote_tuple else None
+    existing_vote = get_user_vote_type(rumor_id, user_ip)
     
     if existing_vote == targeted_vote_type:
+        # ---- UNDO LOGIC: User tapped the exact same button again, retract it ----
         cursor.execute("DELETE FROM votes_log WHERE rumor_id = ? AND user_ip = ?", (rumor_id, user_ip))
         if targeted_vote_type == 'true':
             cursor.execute("UPDATE rumors SET true_votes = MAX(0, true_votes - 1) WHERE id = ?", (rumor_id,))
         else:
             cursor.execute("UPDATE rumors SET fake_votes = MAX(0, fake_votes - 1) WHERE id = ?", (rumor_id,))
+        st.toast("Your vote has been removed.")
     else:
+        # ---- ONE-VOTE ENFORCEMENT: Swap vote cleanly if changing mind ----
         if existing_vote is not None:
             if existing_vote == 'true':
                 cursor.execute("UPDATE rumors SET true_votes = MAX(0, true_votes - 1) WHERE id = ?", (rumor_id,))
@@ -88,12 +92,18 @@ def handle_vote_click(rumor_id, user_ip, targeted_vote_type):
                 cursor.execute("UPDATE rumors SET fake_votes = MAX(0, fake_votes - 1) WHERE id = ?", (rumor_id,))
             cursor.execute("UPDATE votes_log SET vote_type = ? WHERE rumor_id = ? AND user_ip = ?", (targeted_vote_type, rumor_id, user_ip))
         else:
+            # Fresh initial vote submission
             cursor.execute("INSERT INTO votes_log (rumor_id, user_ip, vote_type) VALUES (?, ?, ?)", (rumor_id, user_ip, targeted_vote_type))
+            
         if targeted_vote_type == 'true':
             cursor.execute("UPDATE rumors SET true_votes = true_votes + 1 WHERE id = ?", (rumor_id,))
         else:
             cursor.execute("UPDATE rumors SET fake_votes = fake_votes + 1 WHERE id = ?", (rumor_id,))
+        st.toast(f"Logged choice as {targeted_vote_type.upper()}.")
+        
     conn.commit()
+    
+    # ---- STATUS ENGINE RECALCULATION ----
     cursor.execute("SELECT true_votes, fake_votes FROM rumors WHERE id = ?", (rumor_id,))
     row = cursor.fetchone()
     if row:
@@ -167,8 +177,8 @@ if sorted_rumors:
         with st.container(border=True):
             is_owner = (rumor['creator'] == user_identity)
             
-            # 🏢 TOP ROW SPLIT: Split title row into left (90% content) and right (10% actions menu)
-            title_col, menu_col = st.columns([9, 1])
+            # Layout splitting for the elegant three-dots menu placement
+            title_col, menu_col = st.columns([0.9, 0.1])
             
             with title_col:
                 if is_owner: st.caption("📝 *You posted this report*")
@@ -176,7 +186,6 @@ if sorted_rumors:
                 st.markdown(f"### {rumor['title']} <span style='font-size:14px; color:gray;'>[{zone_tag}]</span>", unsafe_allow_html=True)
             
             with menu_col:
-                # 💬 The Options Dropdown: Renders an elegant vertical options anchor
                 with st.popover("⋮", help="Post Options"):
                     st.button("🗑️ Delete Post", key=f"del_{rumor['id']}", type="secondary", on_click=handle_delete_click, args=(rumor['id'],), use_container_width=True)
             
@@ -186,12 +195,9 @@ if sorted_rumors:
             if rumor['maps']: st.markdown(f"[🗺️ Open Location in Google Maps]({rumor['maps']})")
             st.write(f"🟢 **True Votes:** {rumor['true']} | 🔴 **Fake Votes:** {rumor['fake']}")
             
-            current_vote_tuple = get_user_vote_type(rumor['id'], user_identity)
-            current_vote = current_vote_tuple if current_vote_tuple else None
+            # Fetch active user vote configuration signature securely
+            current_vote = get_user_vote_type(rumor['id'], user_identity)
+            
             true_label = "Undo Vote True ↩️" if current_vote == 'true' else "Vote True 👍"
             fake_label = "Undo Vote Fake ↩️" if current_vote == 'fake' else "Vote Fake 👎"
-            
-            # Action controls
-            st.button(true_label, key=f"t_{rumor['id']}", type="primary" if current_vote == 'true' else "secondary", on_click=handle_vote_click, args=(rumor['id'], user_identity, 'true'))
-            st.button(fake_label, key=f"f_{rumor['id']}", type="primary" if current_vote == 'fake' else "secondary", on_click=handle_vote_click, args=(rumor['id'], user_identity, 'fake'))
             
