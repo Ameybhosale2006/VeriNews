@@ -32,7 +32,7 @@ def init_db():
         )
     ''')
     cursor.execute("SELECT COUNT(*) FROM rumors")
-    if cursor.fetchone()[0] == 0:
+    if cursor.fetchone() == 0:
         mock_data = [
             ("Water Supply Maintenance Alert", "Forward claiming water supply will be completely cut off this weekend due to pipeline maintenance work.", 12, 2, "Verified True ✅", "https://example-municipal-corp.gov", "SYSTEM", "https://google.com", "mumbai"),
             ("Emergency Bank Closure Rumor", "Viral message stating all local banks are closing for 5 consecutive working days starting tomorrow.", 1, 18, "Confirmed Fake ❌", "https://example-reserve-bank.org", "SYSTEM", "", "delhi"),
@@ -71,7 +71,7 @@ def handle_vote_click(rumor_id, user_ip, targeted_vote_type):
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     existing_vote_tuple = get_user_vote_type(rumor_id, user_ip)
-    existing_vote = existing_vote_tuple[0] if existing_vote_tuple else None
+    existing_vote = existing_vote_tuple if existing_vote_tuple else None
     
     if existing_vote == targeted_vote_type:
         cursor.execute("DELETE FROM votes_log WHERE rumor_id = ? AND user_ip = ?", (rumor_id, user_ip))
@@ -185,12 +185,12 @@ if sorted_rumors:
             if rumor['maps']: st.markdown(f"[🗺️ Open Location in Google Maps]({rumor['maps']})")
             st.write(f"🟢 **True Votes:** {rumor['true']} | 🔴 **Fake Votes:** {rumor['fake']}")
             current_vote_tuple = get_user_vote_type(rumor['id'], user_identity)
-            current_vote = current_vote_tuple[0] if current_vote_tuple else None
+            current_vote = current_vote_tuple if current_vote_tuple else None
             true_label = "Undo Vote True ↩️" if current_vote == 'true' else "Vote True 👍"
             fake_label = "Undo Vote Fake ↩️" if current_vote == 'fake' else "Vote Fake 👎"
             
             st.button(true_label, key=f"t_{rumor['id']}", type="primary" if current_vote == 'true' else "secondary", on_click=handle_vote_click, args=(rumor['id'], user_identity, 'true'))
             st.button(fake_label, key=f"f_{rumor['id']}", type="primary" if current_vote == 'fake' else "secondary", on_click=handle_vote_click, args=(rumor['id'], user_identity, 'fake'))
             st.button("🗑️ Delete Post", key=f"del_{rumor['id']}", type="secondary", on_click=handle_delete_click, args=(rumor['id'],))
-            if current_vote: st.caption(f"ℹ️ Selection confirmed as {current_vote.upper()}. Click the active button again to remove selection feedback.")
-else:
+            
+            with st.popover("⋮ Actions Menu", help="Post Settings"):
