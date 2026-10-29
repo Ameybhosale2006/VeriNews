@@ -1,6 +1,6 @@
 [theme]
 # A premium, high-contrast dark theme designed to look clean for academic presentations
-primaryColor = "#00FF66"          # Neon green highlights for active states and indicators
+primaryColor = "#00FF66"          # light green highlights for active states and indicators
 backgroundColor = "#11161B"       # Deep slate blue background
 secondaryBackgroundColor = "#1C232B" # Slightly lighter card borders for sidebar panels
 textColor = "#FFFFFF"             # Crisp white readability text
