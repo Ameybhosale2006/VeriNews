@@ -7,9 +7,22 @@ DB_FILE = "verinews.db"
 st.set_page_config(page_title="VeriNews - Local Rumor Checker", page_icon="🛡️", layout="wide")
 
 def init_db():
-    """Initializes the database schema cleanly without conflicting columns."""
+    """Initializes the database schema and automatically heals structural column mismatches."""
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
+    
+    # Self-healing engine: Verify if the existing table layout matches our exact column requirement
+    try:
+        cursor.execute("SELECT * FROM rumors LIMIT 1")
+        row = cursor.fetchone()
+        # If a table exists but does not have exactly 10 columns, force reset it
+        if row is not None and len(row) != 10:
+            cursor.execute("DROP TABLE IF EXISTS rumors")
+            cursor.execute("DROP TABLE IF EXISTS votes_log")
+    except sqlite3.OperationalError:
+        # Table doesn't exist yet, which is perfect
+        pass
+
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS rumors (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -61,7 +74,7 @@ def get_user_vote_type(rumor_id, user_ip):
     cursor.execute("SELECT vote_type FROM votes_log WHERE rumor_id = ? AND user_ip = ?", (rumor_id, user_ip))
     result = cursor.fetchone()
     conn.close()
-    return result[0] if result else None
+    return result if result else None
 
 def handle_delete_click(rumor_id):
     conn = sqlite3.connect(DB_FILE)
@@ -75,7 +88,8 @@ def handle_delete_click(rumor_id):
 def handle_vote_click(rumor_id, user_ip, targeted_vote_type):
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
-    existing_vote = get_user_vote_type(rumor_id, user_ip)
+    existing_vote_tuple = get_user_vote_type(rumor_id, user_ip)
+    existing_vote = existing_vote_tuple[0] if existing_vote_tuple else None
     
     if existing_vote == targeted_vote_type:
         cursor.execute("DELETE FROM votes_log WHERE rumor_id = ? AND user_ip = ?", (rumor_id, user_ip))
@@ -101,8 +115,7 @@ def handle_vote_click(rumor_id, user_ip, targeted_vote_type):
     cursor.execute("SELECT true_votes, fake_votes FROM rumors WHERE id = ?", (rumor_id,))
     row = cursor.fetchone()
     if row:
-        true_v = row[0]
-        fake_v = row[1]
+        true_v, fake_v = row
         total = true_v + fake_v
         if total >= 3:
             fake_pct = (fake_v / total) * 100
@@ -167,11 +180,7 @@ conn.close()
 processed_rumors = []
 for rumor in all_rumors:
     r_id, r_title, r_content, r_true, r_fake, r_status, r_proof, r_creator, r_maps, r_hub = rumor
-    
-    # SIMPLE AND BULLETPROOF RANKING RULES:
-    # If it matches the user's selected city, it gets rank 1 (top). Otherwise, rank 2.
     sort_rank = 1 if r_hub == selected_city else 2
-    
     processed_rumors.append({
         'id': r_id, 'title': r_title, 'content': r_content,
         'true': r_true, 'fake': r_fake, 'status': r_status, 'proof': r_proof,
@@ -201,12 +210,8 @@ if sorted_rumors:
                 
             st.write(f"🟢 **True Votes:** {rumor['true']} | 🔴 **Fake Votes:** {rumor['fake']}")
             
-            current_vote = get_user_vote_type(rumor['id'], user_identity)
+            current_vote_tuple = get_user_vote_type(rumor['id'], user_identity)
+            current_vote = current_vote_tuple[0] if current_vote_tuple else None
             true_label = "Undo Vote True ↩️" if current_vote == 'true' else "Vote True 👍"
             fake_label = "Undo Vote Fake ↩️" if current_vote == 'fake' else "Vote Fake 👎"
             
-            # Action buttons explicitly rendered cleanly
-            st.button(true_label, key=f"t_{rumor['id']}", type="primary" if current_vote == 'true' else "secondary", on_click=handle_vote_click, args=(rumor['id'], user_identity, 'true'))
-            st.button(fake_label, key=f"f_{rumor['id']}", type="primary" if current_vote == 'fake' else "secondary", on_click=handle_vote_click, args=(rumor['id'], user_identity, 'fake'))
-            st.button("🗑️ Delete Post", key=f"del_{rumor['id']}", type="secondary", on_click=handle_delete_click, args=(rumor['id'],))
-                
