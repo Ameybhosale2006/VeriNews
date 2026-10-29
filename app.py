@@ -70,8 +70,8 @@ def get_user_vote_type(rumor_id, user_ip):
     conn.close()
     return result[0] if result else None
 
-def delete_rumor(rumor_id, user_ip):
-    """Deletes a rumor post if the current user is the original creator."""
+def handle_delete_click(rumor_id, user_ip):
+    """Callback wrapper to safely process deletions on click triggers."""
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     cursor.execute("SELECT creator_ip FROM rumors WHERE id = ?", (rumor_id,))
@@ -80,28 +80,24 @@ def delete_rumor(rumor_id, user_ip):
         cursor.execute("DELETE FROM rumors WHERE id = ?", (rumor_id,))
         cursor.execute("DELETE FROM votes_log WHERE rumor_id = ?", (rumor_id,))
         conn.commit()
-        conn.close()
-        return True
+        st.toast("Post successfully deleted!")
     conn.close()
-    return False
 
-def toggle_vote(rumor_id, user_ip, targeted_vote_type):
-    """Handles adding a new vote, changing a vote, or retracting (undoing) an existing vote."""
+def handle_vote_click(rumor_id, user_ip, targeted_vote_type):
+    """Callback wrapper to process vote state toggling natively on click triggers."""
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     
     existing_vote = get_user_vote_type(rumor_id, user_ip)
     
     if existing_vote == targeted_vote_type:
-        # ---- UNDO LOGIC ----
         cursor.execute("DELETE FROM votes_log WHERE rumor_id = ? AND user_ip = ?", (rumor_id, user_ip))
         if targeted_vote_type == 'true':
             cursor.execute("UPDATE rumors SET true_votes = MAX(0, true_votes - 1) WHERE id = ?", (rumor_id,))
         else:
             cursor.execute("UPDATE rumors SET fake_votes = MAX(0, fake_votes - 1) WHERE id = ?", (rumor_id,))
-        toast_msg = "Your vote has been removed."
+        st.toast("Your vote has been removed.")
     else:
-        # ---- NEW VOTE OR CHANGE VOTE LOGIC ----
         if existing_vote is not None:
             if existing_vote == 'true':
                 cursor.execute("UPDATE rumors SET true_votes = MAX(0, true_votes - 1) WHERE id = ?", (rumor_id,))
@@ -115,21 +111,19 @@ def toggle_vote(rumor_id, user_ip, targeted_vote_type):
             cursor.execute("UPDATE rumors SET true_votes = true_votes + 1 WHERE id = ?", (rumor_id,))
         else:
             cursor.execute("UPDATE rumors SET fake_votes = fake_votes + 1 WHERE id = ?", (rumor_id,))
-        toast_msg = f"Logged as {targeted_vote_type.upper()}."
+        st.toast(f"Logged as {targeted_vote_type.upper()}.")
 
     conn.commit()
     
-    # ---- RECALCULATE VERIFICATION STATUS ----
+    # Recalculate status metrics
     cursor.execute("SELECT true_votes, fake_votes FROM rumors WHERE id = ?", (rumor_id,))
     row = cursor.fetchone()
     if row:
         true_v, fake_v = row[0], row[1]
         total = true_v + fake_v
-        
         if total >= 3:
             fake_pct = (fake_v / total) * 100
             true_pct = (true_v / total) * 100
-            
             if fake_pct >= 66:
                 status = "Confirmed Fake ❌"
             elif true_pct >= 66:
@@ -138,14 +132,12 @@ def toggle_vote(rumor_id, user_ip, targeted_vote_type):
                 status = "Highly Disputed ⚠️"
         else:
             status = "Unverified ⏳"
-            
         cursor.execute("UPDATE rumors SET status = ? WHERE id = ?", (status, rumor_id))
         conn.commit()
         
     conn.close()
-    return toast_msg
 
-# Initialize database at startup
+# Initialize database components
 init_db()
 user_identity = get_user_session_id()
 
@@ -153,7 +145,7 @@ user_identity = get_user_session_id()
 st.title("🛡️ VeriNews — Hyper-Local Rumor Verification Index")
 st.markdown("An open public space to flag viral forwards and confirm neighborhood safety reports.")
 
-# Sidebar Configuration for reporting new rumors
+# Sidebar Form Configuration
 st.sidebar.header("📢 Report an Unverified Forward")
 with st.sidebar.form(key="report_form", clear_on_submit=True):
     title = st.text_input("Rumor/Forward Headline", placeholder="e.g., Water cuts expected tomorrow")
@@ -177,11 +169,10 @@ if submit_button:
     else:
         st.sidebar.error("Please fill out all required fields.")
 
-# Main Dashboard Feed Filters
+# Main Layout Dashboard
 st.subheader("📍 Neighborhood Alerts")
 pincode_filter = st.text_input("Filter feed by entering your 6-digit Pincode:", placeholder="Leave blank to view all regions")
 
-# Fetch data based on the pincode search query
 conn = sqlite3.connect(DB_FILE)
 cursor = conn.cursor()
 if pincode_filter.strip():
@@ -191,18 +182,15 @@ else:
 rumors = cursor.fetchall()
 conn.close()
 
-# Render items dynamically
 if rumors:
     for rumor in rumors:
         r_id, r_title, r_content, r_pincode, r_true, r_fake, r_status, r_proof, r_creator = rumor
         
         with st.container():
             st.markdown("---")
-            
-            # Use short inline definitions to prevent any indentation failure
             is_owner = (r_creator == user_identity)
             if is_owner:
-                st.caption("📝 *You posted this report*")
+                st.caption("html📝 *You posted this report*")
                 
             st.markdown(f"### {r_title}")
             st.markdown(f"**📍 Pincode Location Target:** {r_pincode} | **Status Evaluation:** `{r_status}`")
@@ -217,10 +205,13 @@ if rumors:
             true_label = "Undo Vote True ↩️" if current_vote == 'true' else "Vote True 👍"
             fake_label = "Undo Vote Fake ↩️" if current_vote == 'fake' else "Vote Fake 👎"
             
-            # Action controls running perfectly on a single level
-            if st.button(true_label, key=f"t_{r_id}", type="primary" if current_vote == 'true' else "secondary"):
-                msg = toggle_vote(r_id, user_identity, 'true')
-                st.toast(msg)
-                st.rerun()
+            # 100% Flat structural declaration: no code block indentation inside loops!
+            st.button(true_label, key=f"t_{r_id}", type="primary" if current_vote == 'true' else "secondary", on_click=handle_vote_click, args=(r_id, user_identity, 'true'))
+            st.button(fake_label, key=f"f_{r_id}", type="primary" if current_vote == 'fake' else "secondary", on_click=handle_vote_click, args=(r_id, user_identity, 'fake'))
+            
+            if is_owner:
+                st.button("🗑️ Delete Post", key=f"del_{r_id}", type="secondary", on_click=handle_delete_click, args=(r_id, user_identity))
                 
-            if st.button(fake_label, key=f"f_{r_id}", type="primary" if current_vote == 'fake' else "secondary"):
+            if current_vote:
+                st.caption(f"ℹ️ You previously marked this claim as **{current_vote.upper()}**. Tap the same button again to undo your selection.")
+else:
