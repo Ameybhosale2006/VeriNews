@@ -40,7 +40,7 @@ def init_db():
     
     # Pre-seed realistic example neighborhood rumors if database is empty
     cursor.execute("SELECT COUNT(*) FROM rumors")
-    if cursor.fetchone() == 0:
+    if cursor.fetchone()[0] == 0:
         mock_data = [
             ("Water Supply Maintenance Alert", "Forward claiming water supply will be completely cut off this weekend due to pipeline maintenance work.", 400001, 12, 2, "Verified True ✅", "https://example-municipal-corp.gov", "SYSTEM"),
             ("Emergency Bank Closure Rumor", "Viral message stating all local banks are closing for 5 consecutive working days starting tomorrow. Panic buying reported.", 400025, 1, 18, "Confirmed Fake ❌", "https://example-reserve-bank.org", "SYSTEM"),
@@ -199,7 +199,7 @@ if rumors:
         with st.container():
             st.markdown("---")
             if r_creator == user_identity:
-                st.caption("编️ *You posted this report*")
+                st.caption("📝 *You posted this report*")
                 
             st.markdown(f"### {r_title}")
             st.markdown(f"**📍 Pincode Location Target:** {r_pincode} | **Status Evaluation:** `{r_status}`")
