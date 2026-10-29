@@ -1,5 +1,6 @@
 import sqlite3
 import streamlit as st
+from streamlit.runtime.scriptrunner import get_script_run_ctx
 
 DB_FILE = "verinews.db"
 
@@ -39,7 +40,7 @@ def init_db():
     
     # Pre-seed realistic example neighborhood rumors if database is empty
     cursor.execute("SELECT COUNT(*) FROM rumors")
-    if cursor.fetchone()[0] == 0:
+    if cursor.fetchone() == 0:
         mock_data = [
             ("Water Supply Maintenance Alert", "Forward claiming water supply will be completely cut off this weekend due to pipeline maintenance work.", 400001, 12, 2, "Verified True ✅", "https://example-municipal-corp.gov", "SYSTEM"),
             ("Emergency Bank Closure Rumor", "Viral message stating all local banks are closing for 5 consecutive working days starting tomorrow. Panic buying reported.", 400025, 1, 18, "Confirmed Fake ❌", "https://example-reserve-bank.org", "SYSTEM"),
@@ -53,12 +54,12 @@ def init_db():
     conn.commit()
     conn.close()
 
-def get_user_ip():
-    """Retrieves a stable network identifier for the mobile session."""
-    if 'user_fingerprint' not in st.session_state:
-        import uuid
-        st.session_state['user_fingerprint'] = str(uuid.getnode())
-    return st.session_state['user_fingerprint']
+def get_user_session_id():
+    """Retrieves a completely stable, unique connection signature for the active user tab."""
+    ctx = get_script_run_ctx()
+    if ctx is not None:
+        return str(ctx.session_id)
+    return "UNKNOWN_USER"
 
 def get_user_vote_type(rumor_id, user_ip):
     """Returns the type of vote cast by the user ('true', 'fake', or None)."""
@@ -146,7 +147,7 @@ def toggle_vote(rumor_id, user_ip, targeted_vote_type):
 
 # Initialize database at startup
 init_db()
-user_identity = get_user_ip()
+user_identity = get_user_session_id()
 
 # ---- APPLICATION USER INTERFACE ----
 st.title("🛡️ VeriNews — Hyper-Local Rumor Verification Index")
@@ -198,7 +199,7 @@ if rumors:
         with st.container():
             st.markdown("---")
             if r_creator == user_identity:
-                st.caption("📝 *You posted this report*")
+                st.caption("编️ *You posted this report*")
                 
             st.markdown(f"### {r_title}")
             st.markdown(f"**📍 Pincode Location Target:** {r_pincode} | **Status Evaluation:** `{r_status}`")
@@ -213,7 +214,7 @@ if rumors:
             true_label = "Undo Vote True ↩️" if current_vote == 'true' else "Vote True 👍"
             fake_label = "Undo Vote Fake ↩️" if current_vote == 'fake' else "Vote Fake 👎"
             
-            # Linear flat list structure to avoid mobile pasting indentation drops entirely
+            # Action controls
             if st.button(true_label, key=f"t_{r_id}", type="primary" if current_vote == 'true' else "secondary"):
                 msg = toggle_vote(r_id, user_identity, 'true')
                 st.toast(msg)
@@ -224,3 +225,4 @@ if rumors:
                 st.toast(msg)
                 st.rerun()
                 
+            if r_creator == user_identity:
